@@ -37,8 +37,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const sportsData = await oddsApiService.getSports();
       
-      // Filter for major sports we want to track
-      const majorSports = ['americanfootball_nfl', 'basketball_nba', 'baseball_mlb', 'icehockey_nhl', 'americanfootball_ncaaf'];
+      // Filter for major sports we want to track (SportsGameOdds format)
+      const majorSports = ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB'];
       const filteredSports = sportsData.filter(sport => majorSports.includes(sport.key));
       
       for (const sport of filteredSports) {
@@ -91,23 +91,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let oddsUpdated = 0;
       
       for (const event of oddsData) {
+        // Parse commence time safely
+        const commenceTime = event.commence_time ? new Date(event.commence_time) : new Date();
+        if (isNaN(commenceTime.getTime())) {
+          console.warn(`Invalid commence time for event ${event.id}:`, event.commence_time);
+          continue;
+        }
+        
         // Upsert game
         await storage.upsertGame({
           id: event.id,
           sportId: event.sport_key,
           homeTeam: event.home_team,
           awayTeam: event.away_team,
-          commenceTime: new Date(event.commence_time),
+          commenceTime,
           completed: false,
         });
         gamesUpdated++;
         
         // Upsert bookmakers and odds
         for (const bookmaker of event.bookmakers) {
+          const lastUpdate = bookmaker.last_update ? new Date(bookmaker.last_update) : new Date();
+          if (isNaN(lastUpdate.getTime())) {
+            console.warn(`Invalid last_update for bookmaker ${bookmaker.key}:`, bookmaker.last_update);
+            continue;
+          }
+          
           await storage.upsertBookmaker({
             id: bookmaker.key,
             title: bookmaker.title,
-            lastUpdate: new Date(bookmaker.last_update),
+            lastUpdate,
           });
           
           // Process each market
