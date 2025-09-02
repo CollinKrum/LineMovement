@@ -1,0 +1,38 @@
+Project Brief: Sports Line Movement Tracker Website
+
+Overview:
+I want to build a public-facing website that tracks real-time pregame betting line movements across all major sports (NFL, NBA, MLB, NHL, NCAAF, etc.), with the option to expand into live/in-game line tracking later. The site should allow users to compare lines (“line shopping”) across multiple sportsbooks, highlight major shifts, and provide tools for personal alerts and favorites.
+
+Core Features:
+	1.	Data Integration
+	•	Pull odds and line movements from multiple sportsbooks using available APIs (or other legal, reliable data sources).
+	•	Update frequently (ideally real-time or every 15–30 seconds).
+	•	Track spreads, moneylines, totals, and possibly prop markets later.
+	2.	Line Movement Dashboard
+	•	Display lines in a clean, mobile-friendly dashboard (tables + charts).
+	•	Highlight big movements (e.g., spread shifting by 1+ point, totals moving significantly).
+	•	Include trendlines and simple historical graphs for each game.
+	3.	User Accounts & Customization
+	•	Users can log in to save favorite teams/games.
+	•	Option to set custom alerts for line movements.
+	•	Alerts delivered via push notifications (with potential expansion to email/SMS).
+	4.	Public Features
+	•	Free-to-use dashboard for anyone to check lines.
+	•	“Big Movers” section showing notable market shifts across all sports.
+	5.	Monetization
+	•	Start with free access + Google AdSense for revenue.
+	•	Later transition to a freemium model: free users get basic features, subscribers get advanced alerts, deeper historical data, and more customization.
+	6.	Design & UX
+	•	Simple, responsive design that works well on desktop and mobile.
+	•	Emphasis on clarity and speed.
+	•	Historical graphs should be lightweight but visually clear.
+
+Future Expansion:
+	•	In-game line tracking.
+	•	Prop bets and niche markets.
+	•	Affiliate partnerships with sportsbooks.
+
+Tech Goals:
+	•	Automate as much as possible (minimal manual updates).
+	•	Use a modern stack that balances speed with maintainability.
+	•	Push notifications should be built into the framework from the start.
