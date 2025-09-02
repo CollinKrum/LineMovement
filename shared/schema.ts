@@ -9,6 +9,7 @@ import {
   decimal,
   integer,
   boolean,
+  unique,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -75,7 +76,9 @@ export const odds = pgTable("odds", {
   price: decimal("price", { precision: 10, scale: 2 }),
   point: decimal("point", { precision: 5, scale: 1 }), // For spreads and totals
   lastUpdate: timestamp("last_update").defaultNow(),
-});
+}, (table) => [
+  unique("unique_odds_entry").on(table.gameId, table.bookmakerId, table.market, table.outcomeType),
+]);
 
 // Line movement history
 export const lineMovements = pgTable("line_movements", {

@@ -178,7 +178,8 @@ export class DatabaseStorage implements IStorage {
       .onConflictDoUpdate({
         target: [odds.gameId, odds.bookmakerId, odds.market, odds.outcomeType],
         set: {
-          ...oddsData,
+          price: oddsData.price,
+          point: oddsData.point,
           lastUpdate: new Date(),
         },
       })
@@ -323,7 +324,7 @@ export class DatabaseStorage implements IStorage {
         eq(userAlerts.id, id),
         eq(userAlerts.userId, userId)
       ));
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 }
 
