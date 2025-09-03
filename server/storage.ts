@@ -102,13 +102,17 @@ export class DatabaseStorage implements IStorage {
 
   // Games operations
   async getGamesBySport(sportId: string): Promise<Game[]> {
+    // Show games from last 7 days and future (more lenient for demo)
+    const lastWeek = new Date();
+    lastWeek.setDate(lastWeek.getDate() - 7);
+    
     return await db
       .select()
       .from(games)
       .where(and(
         eq(games.sportId, sportId),
         eq(games.completed, false),
-        gte(games.commenceTime, new Date())
+        gte(games.commenceTime, lastWeek)
       ))
       .orderBy(games.commenceTime);
   }
