@@ -6,25 +6,32 @@ export default function Landing() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-card border-b border-border">
+      <header className="bg-gradient-to-r from-slate-900 via-blue-900 to-slate-900 border-b border-blue-500/20 shadow-2xl backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+          <div className="flex justify-between items-center h-20">
             <div className="flex items-center">
-              <h1 className="text-2xl font-bold text-primary">LineTracker Pro</h1>
+              <div className="relative">
+                <h1 className="text-3xl font-black bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent animate-pulse">
+                  🏆 LineTracker Pro
+                </h1>
+                <div className="absolute -inset-2 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-lg blur-sm -z-10"></div>
+              </div>
             </div>
             <div className="flex items-center space-x-4">
               <Button 
                 variant="ghost"
+                className="text-white hover:bg-white/10 border border-white/20 hover:border-white/40 transition-all duration-300"
                 onClick={() => window.location.href = '/api/login'}
                 data-testid="button-signin"
               >
                 Sign In
               </Button>
               <Button 
+                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300"
                 onClick={() => window.location.href = '/api/login'}
                 data-testid="button-signup"
               >
-                Get Started
+                🚀 Get Started
               </Button>
             </div>
           </div>
@@ -32,33 +39,49 @@ export default function Landing() {
       </header>
 
       {/* Hero Section */}
-      <section className="relative bg-gradient-to-br from-primary/5 via-background to-accent/5 py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="relative bg-gradient-to-br from-slate-900 via-blue-900 to-purple-900 py-32 overflow-hidden">
+        {/* Animated background elements */}
+        <div className="absolute inset-0">
+          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-pulse"></div>
+          <div className="absolute top-1/3 right-1/4 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
+          <div className="absolute bottom-1/4 left-1/3 w-72 h-72 bg-cyan-500/10 rounded-full blur-3xl animate-pulse delay-2000"></div>
+        </div>
+        
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
-            <h1 className="text-4xl md:text-6xl font-bold text-foreground mb-6">
-              Track Sports Betting
-              <span className="text-primary block">Line Movements</span>
+            <div className="mb-8">
+              <span className="inline-block bg-gradient-to-r from-blue-500 to-purple-500 text-white px-6 py-2 rounded-full text-sm font-semibold shadow-lg animate-bounce">
+                🔥 Live Sports Betting Intelligence
+              </span>
+            </div>
+            <h1 className="text-5xl md:text-7xl font-black mb-8">
+              <span className="bg-gradient-to-r from-white via-blue-200 to-purple-200 bg-clip-text text-transparent">
+                Track Sports Betting
+              </span>
+              <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent block animate-pulse">
+                Line Movements ⚡
+              </span>
             </h1>
-            <p className="text-xl text-muted-foreground mb-8 max-w-3xl mx-auto">
-              Real-time odds tracking, line movement alerts, and the best odds comparison 
+            <p className="text-xl md:text-2xl text-blue-100/90 mb-12 max-w-4xl mx-auto leading-relaxed">
+              🎯 Real-time odds tracking, line movement alerts, and the best odds comparison 
               across all major sportsbooks. Never miss a profitable betting opportunity again.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <div className="flex flex-col sm:flex-row gap-6 justify-center">
               <Button 
                 size="lg" 
-                className="text-lg px-8 py-3"
+                className="text-xl px-12 py-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-2xl hover:shadow-blue-500/25 transform hover:scale-110 transition-all duration-300 border-2 border-blue-400/50"
                 onClick={() => window.location.href = '/api/login'}
                 data-testid="button-start-tracking"
               >
-                Start Tracking Lines
+                🚀 Start Tracking Lines
               </Button>
               <Button 
                 variant="outline" 
                 size="lg" 
-                className="text-lg px-8 py-3"
+                className="text-xl px-12 py-6 bg-white/10 hover:bg-white/20 text-white border-2 border-white/30 hover:border-white/50 backdrop-blur-sm shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300"
                 data-testid="button-view-demo"
               >
-                View Demo
+                📊 View Demo
               </Button>
             </div>
           </div>
@@ -66,61 +89,82 @@ export default function Landing() {
       </section>
 
       {/* Features Section */}
-      <section className="py-20 bg-muted/30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-              Everything You Need to Track Lines
+      <section className="py-32 bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 dark:from-slate-900 dark:via-blue-900 dark:to-purple-900 relative overflow-hidden">
+        <div className="absolute inset-0 bg-grid-slate-200/50 dark:bg-grid-slate-700/25 -z-10"></div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+          <div className="text-center mb-20">
+            <div className="inline-block bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-full text-sm font-semibold shadow-lg mb-6">
+              ✨ Premium Features
+            </div>
+            <h2 className="text-4xl md:text-6xl font-black mb-6">
+              <span className="bg-gradient-to-r from-slate-900 to-blue-600 dark:from-white dark:to-blue-400 bg-clip-text text-transparent">
+                Everything You Need to
+              </span>
+              <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent block">
+                Dominate Lines 🎯
+              </span>
             </h2>
-            <p className="text-xl text-muted-foreground">
+            <p className="text-xl md:text-2xl text-slate-600 dark:text-slate-300">
               Professional-grade tools for serious sports bettors
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <Card className="text-center p-6">
-              <CardContent className="pt-6">
-                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-4">
-                  <BarChart3 className="w-6 h-6 text-primary" />
+            <Card className="group relative overflow-hidden bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border-2 border-transparent hover:border-blue-500/50 transition-all duration-500 transform hover:scale-105 hover:shadow-2xl hover:shadow-blue-500/25">
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+              <CardContent className="relative p-8 text-center">
+                <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg group-hover:shadow-blue-500/50 transition-all duration-300 group-hover:animate-bounce">
+                  <BarChart3 className="w-8 h-8 text-white" />
                 </div>
-                <h3 className="text-lg font-semibold mb-2">Real-Time Odds</h3>
-                <p className="text-muted-foreground text-sm">
+                <h3 className="text-xl font-bold mb-3 bg-gradient-to-r from-slate-900 to-blue-600 dark:from-white dark:to-blue-400 bg-clip-text text-transparent">
+                  📊 Real-Time Odds
+                </h3>
+                <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
                   Live odds from 8+ major sportsbooks updated every 30 seconds
                 </p>
               </CardContent>
             </Card>
 
-            <Card className="text-center p-6">
-              <CardContent className="pt-6">
-                <div className="w-12 h-12 bg-accent/10 rounded-lg flex items-center justify-center mx-auto mb-4">
-                  <TrendingUp className="w-6 h-6 text-accent" />
+            <Card className="group relative overflow-hidden bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border-2 border-transparent hover:border-orange-500/50 transition-all duration-500 transform hover:scale-105 hover:shadow-2xl hover:shadow-orange-500/25">
+              <div className="absolute inset-0 bg-gradient-to-br from-orange-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+              <CardContent className="relative p-8 text-center">
+                <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-red-500 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg group-hover:shadow-orange-500/50 transition-all duration-300 group-hover:animate-bounce">
+                  <TrendingUp className="w-8 h-8 text-white" />
                 </div>
-                <h3 className="text-lg font-semibold mb-2">Line Movement</h3>
-                <p className="text-muted-foreground text-sm">
+                <h3 className="text-xl font-bold mb-3 bg-gradient-to-r from-slate-900 to-orange-600 dark:from-white dark:to-orange-400 bg-clip-text text-transparent">
+                  🔥 Line Movement
+                </h3>
+                <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
                   Track and visualize how betting lines move throughout the day
                 </p>
               </CardContent>
             </Card>
 
-            <Card className="text-center p-6">
-              <CardContent className="pt-6">
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-4">
-                  <Bell className="w-6 h-6 text-green-600" />
+            <Card className="group relative overflow-hidden bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border-2 border-transparent hover:border-green-500/50 transition-all duration-500 transform hover:scale-105 hover:shadow-2xl hover:shadow-green-500/25">
+              <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+              <CardContent className="relative p-8 text-center">
+                <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg group-hover:shadow-green-500/50 transition-all duration-300 group-hover:animate-bounce">
+                  <Bell className="w-8 h-8 text-white" />
                 </div>
-                <h3 className="text-lg font-semibold mb-2">Smart Alerts</h3>
-                <p className="text-muted-foreground text-sm">
+                <h3 className="text-xl font-bold mb-3 bg-gradient-to-r from-slate-900 to-green-600 dark:from-white dark:to-green-400 bg-clip-text text-transparent">
+                  🔔 Smart Alerts
+                </h3>
+                <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
                   Get notified instantly when lines move beyond your thresholds
                 </p>
               </CardContent>
             </Card>
 
-            <Card className="text-center p-6">
-              <CardContent className="pt-6">
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-4">
-                  <Zap className="w-6 h-6 text-blue-600" />
+            <Card className="group relative overflow-hidden bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border-2 border-transparent hover:border-purple-500/50 transition-all duration-500 transform hover:scale-105 hover:shadow-2xl hover:shadow-purple-500/25">
+              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+              <CardContent className="relative p-8 text-center">
+                <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg group-hover:shadow-purple-500/50 transition-all duration-300 group-hover:animate-bounce">
+                  <Zap className="w-8 h-8 text-white" />
                 </div>
-                <h3 className="text-lg font-semibold mb-2">Best Odds</h3>
-                <p className="text-muted-foreground text-sm">
+                <h3 className="text-xl font-bold mb-3 bg-gradient-to-r from-slate-900 to-purple-600 dark:from-white dark:to-purple-400 bg-clip-text text-transparent">
+                  ⚡ Best Odds
+                </h3>
+                <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
                   Automatically find the best odds across all sportsbooks
                 </p>
               </CardContent>
@@ -130,42 +174,82 @@ export default function Landing() {
       </section>
 
       {/* Stats Section */}
-      <section className="py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
-            <div>
-              <div className="text-4xl font-bold text-primary mb-2">8+</div>
-              <div className="text-lg text-muted-foreground">Sportsbooks Tracked</div>
+      <section className="py-32 bg-gradient-to-r from-slate-900 via-blue-900 to-purple-900 relative overflow-hidden">
+        <div className="absolute inset-0">
+          <div className="absolute top-1/4 left-1/6 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl animate-pulse"></div>
+          <div className="absolute bottom-1/4 right-1/6 w-80 h-80 bg-purple-500/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
+        </div>
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-12 text-center">
+            <div className="group">
+              <div className="relative inline-block mb-4">
+                <div className="text-6xl md:text-7xl font-black bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent animate-pulse group-hover:scale-110 transition-transform duration-300">
+                  8+
+                </div>
+                <div className="absolute -inset-4 bg-blue-500/20 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              </div>
+              <div className="text-xl md:text-2xl text-blue-100 font-semibold">
+                📊 Sportsbooks Tracked
+              </div>
             </div>
-            <div>
-              <div className="text-4xl font-bold text-primary mb-2">24/7</div>
-              <div className="text-lg text-muted-foreground">Live Monitoring</div>
+            <div className="group">
+              <div className="relative inline-block mb-4">
+                <div className="text-6xl md:text-7xl font-black bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent animate-pulse group-hover:scale-110 transition-transform duration-300">
+                  24/7
+                </div>
+                <div className="absolute -inset-4 bg-purple-500/20 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              </div>
+              <div className="text-xl md:text-2xl text-purple-100 font-semibold">
+                🔴 Live Monitoring
+              </div>
             </div>
-            <div>
-              <div className="text-4xl font-bold text-primary mb-2">5</div>
-              <div className="text-lg text-muted-foreground">Major Sports</div>
+            <div className="group">
+              <div className="relative inline-block mb-4">
+                <div className="text-6xl md:text-7xl font-black bg-gradient-to-r from-cyan-400 to-green-400 bg-clip-text text-transparent animate-pulse group-hover:scale-110 transition-transform duration-300">
+                  5
+                </div>
+                <div className="absolute -inset-4 bg-cyan-500/20 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              </div>
+              <div className="text-xl md:text-2xl text-cyan-100 font-semibold">
+                🏆 Major Sports
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 bg-primary/5">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-            Ready to Start Tracking Lines?
-          </h2>
-          <p className="text-xl text-muted-foreground mb-8">
-            Join thousands of bettors who use LineTracker Pro to find the best odds and track line movements.
-          </p>
-          <Button 
-            size="lg" 
-            className="text-lg px-8 py-3"
-            onClick={() => window.location.href = '/api/login'}
-            data-testid="button-get-started-cta"
-          >
-            Get Started - It's Free
-          </Button>
+      <section className="py-32 bg-gradient-to-br from-blue-600 via-purple-600 to-cyan-600 relative overflow-hidden">
+        <div className="absolute inset-0">
+          <div className="absolute top-1/3 left-1/4 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse"></div>
+          <div className="absolute bottom-1/3 right-1/4 w-80 h-80 bg-white/5 rounded-full blur-3xl animate-pulse delay-1000"></div>
+        </div>
+        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <div className="bg-white/10 backdrop-blur-sm rounded-3xl border border-white/20 p-12 shadow-2xl">
+            <div className="mb-8">
+              <span className="inline-block bg-white/20 text-white px-6 py-2 rounded-full text-sm font-semibold shadow-lg animate-bounce">
+                🚀 Join the Winners
+              </span>
+            </div>
+            <h2 className="text-4xl md:text-6xl font-black text-white mb-6">
+              Ready to Start
+              <span className="block bg-gradient-to-r from-yellow-300 to-orange-300 bg-clip-text text-transparent">
+                Tracking Lines? 🎯
+              </span>
+            </h2>
+            <p className="text-xl md:text-2xl text-white/90 mb-12 max-w-4xl mx-auto leading-relaxed">
+              Join thousands of bettors who use LineTracker Pro to find the best odds and track line movements. Start winning more today!
+            </p>
+            <Button 
+              size="lg" 
+              className="text-2xl px-16 py-8 bg-white hover:bg-gray-100 text-blue-600 shadow-2xl hover:shadow-white/25 transform hover:scale-110 transition-all duration-300 border-4 border-white/50 hover:border-white font-black"
+              onClick={() => window.location.href = '/api/login'}
+              data-testid="button-get-started-cta"
+            >
+              🎉 Get Started - It's Free!
+            </Button>
+            <p className="text-white/70 text-sm mt-6">✨ No credit card required • 🔒 Secure signup</p>
+          </div>
         </div>
       </section>
 

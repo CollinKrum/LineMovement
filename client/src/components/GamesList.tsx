@@ -112,118 +112,123 @@ export default function GamesList() {
   }
 
   return (
-    <div className="bg-card rounded-lg border border-border shadow-sm">
-      <div className="px-6 py-4 border-b border-border">
+    <div className="bg-gradient-to-br from-white via-slate-50 to-blue-50 dark:from-slate-800 dark:via-slate-750 dark:to-slate-800 rounded-2xl border-2 border-blue-200/50 dark:border-blue-500/20 shadow-2xl backdrop-blur-sm">
+      <div className="px-8 py-6 border-b border-blue-200/50 dark:border-blue-500/20 bg-gradient-to-r from-blue-50/50 to-purple-50/50 dark:from-blue-900/20 dark:to-purple-900/20">
         <div className="flex justify-between items-center">
           <div>
-            <h2 className="text-lg font-semibold">Upcoming Games</h2>
-            <p className="text-sm text-muted-foreground">Pregame odds from multiple sportsbooks</p>
+            <h2 className="text-2xl font-black bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              🎯 Upcoming Games
+            </h2>
+            <p className="text-slate-600 dark:text-slate-300 font-medium">⚡ Pregame odds from multiple sportsbooks</p>
           </div>
           <Button
             variant="outline"
-            size="sm"
+            size="lg"
+            className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white border-0 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 font-semibold px-6 py-3"
             onClick={() => syncOddsMutation.mutate()}
             disabled={syncOddsMutation.isPending}
             data-testid="button-refresh-odds"
           >
             {syncOddsMutation.isPending ? (
-              <RefreshCw className="w-4 h-4 animate-spin" />
+              <RefreshCw className="w-5 h-5 animate-spin mr-2" />
             ) : (
-              <RefreshCw className="w-4 h-4" />
+              <RefreshCw className="w-5 h-5 mr-2" />
             )}
-            Refresh
+            🔄 Refresh
           </Button>
         </div>
       </div>
       
       {!games?.length ? (
-        <div className="p-12 text-center">
-          <div className="text-muted-foreground mb-4">No games available for this sport</div>
+        <div className="p-16 text-center">
+          <div className="mb-8">
+            <div className="w-24 h-24 mx-auto mb-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center animate-pulse">
+              <span className="text-4xl">🎮</span>
+            </div>
+            <div className="text-xl font-semibold text-slate-600 dark:text-slate-300 mb-4">No games available for this sport</div>
+            <div className="text-slate-500 dark:text-slate-400">🔍 Try syncing odds to load fresh data</div>
+          </div>
           <Button 
+            className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 font-semibold px-8 py-4 text-lg"
             onClick={() => syncOddsMutation.mutate()}
             disabled={syncOddsMutation.isPending}
             data-testid="button-sync-odds"
           >
-            Sync Odds from API
+            📡 Sync Odds from API
           </Button>
         </div>
       ) : (
-        <div className="overflow-x-auto mobile-scroll">
-          <table className="w-full odds-table">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Game</th>
-                <th className="text-center px-3 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Spread</th>
-                <th className="text-center px-3 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Total</th>
-                <th className="text-center px-3 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Moneyline</th>
-                <th className="text-center px-3 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {games.map((game) => (
-                <tr key={game.id} className="hover:bg-muted/25 transition-colors">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-3">
-                      <div>
-                        <div className="text-sm font-medium" data-testid={`text-game-${game.id}`}>
-                          {game.awayTeam} @ {game.homeTeam}
-                        </div>
-                        <div className="text-xs text-muted-foreground" data-testid={`text-time-${game.id}`}>
-                          {formatDateTime(game.commenceTime)}
-                        </div>
+        <div className="p-6">
+          <div className="grid gap-6">
+            {games.map((game) => (
+              <div key={game.id} className="group relative bg-gradient-to-r from-white via-slate-50 to-white dark:from-slate-800 dark:via-slate-750 dark:to-slate-800 rounded-2xl border-2 border-slate-200/50 dark:border-slate-600/30 hover:border-blue-400/50 dark:hover:border-blue-500/50 shadow-lg hover:shadow-2xl hover:shadow-blue-500/25 transition-all duration-500 transform hover:scale-[1.02] p-6">
+                {/* Game Header */}
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="text-2xl font-black text-slate-900 dark:text-white" data-testid={`text-game-${game.id}`}>
+                        🏆 {game.awayTeam} @ {game.homeTeam}
+                      </div>
+                      <div className="px-3 py-1 bg-gradient-to-r from-blue-500 to-purple-500 text-white text-sm font-bold rounded-full shadow-md">
+                        {game.sportId}
                       </div>
                     </div>
-                  </td>
-                  <td className="px-3 py-4 text-center">
-                    <div className="space-y-1">
-                      <div className="text-sm">-</div>
-                      <div className="text-xs text-muted-foreground">-</div>
+                    <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300" data-testid={`text-time-${game.id}`}>
+                      <span className="text-lg">📅</span>
+                      <span className="font-semibold">{formatDateTime(game.commenceTime)}</span>
                     </div>
-                  </td>
-                  <td className="px-3 py-4 text-center">
-                    <div className="space-y-1">
-                      <div className="text-sm">-</div>
-                      <div className="text-xs text-muted-foreground">-</div>
-                    </div>
-                  </td>
-                  <td className="px-3 py-4 text-center">
-                    <div className="space-y-1">
-                      <div className="text-sm">-</div>
-                      <div className="text-xs text-muted-foreground">-</div>
-                    </div>
-                  </td>
-                  <td className="px-3 py-4 text-center">
-                    <div className="flex items-center justify-center space-x-2">
-                      {isAuthenticated && (
-                        <button
-                          className="p-1 hover:bg-muted rounded transition-colors"
-                          onClick={() => toggleFavoriteMutation.mutate(game.id)}
-                          disabled={toggleFavoriteMutation.isPending}
-                          title="Toggle favorite"
-                          data-testid={`button-favorite-${game.id}`}
-                        >
-                          <Heart 
-                            className={`w-4 h-4 ${
-                              isFavorited(game.id) 
-                                ? "text-accent fill-current" 
-                                : "text-muted-foreground hover:text-accent"
-                            }`}
-                          />
-                        </button>
-                      )}
+                  </div>
+                  
+                  {/* Action Buttons */}
+                  <div className="flex items-center space-x-3">
+                    {isAuthenticated && (
                       <button
-                        className="p-1 hover:bg-muted rounded transition-colors"
-                        title="View line history"
-                        data-testid={`button-history-${game.id}`}
+                        className={`p-3 rounded-xl transition-all duration-300 transform hover:scale-110 shadow-lg ${
+                          isFavorited(game.id) 
+                            ? "bg-gradient-to-r from-red-500 to-pink-500 text-white shadow-red-500/50" 
+                            : "bg-white/80 dark:bg-slate-700/80 hover:bg-red-50 dark:hover:bg-red-900/20 border-2 border-red-200 dark:border-red-500/30"
+                        }`}
+                        onClick={() => toggleFavoriteMutation.mutate(game.id)}
+                        disabled={toggleFavoriteMutation.isPending}
+                        title="Toggle favorite"
+                        data-testid={`button-favorite-${game.id}`}
                       >
-                        <BarChart3 className="w-4 h-4 text-muted-foreground hover:text-primary" />
+                        <Heart className="w-5 h-5" />
                       </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    )}
+                    <button
+                      className="p-3 rounded-xl bg-white/80 dark:bg-slate-700/80 hover:bg-blue-50 dark:hover:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-500/30 transition-all duration-300 transform hover:scale-110 shadow-lg hover:shadow-blue-500/50"
+                      title="View line history"
+                      data-testid={`button-history-${game.id}`}
+                    >
+                      <BarChart3 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Odds Section */}
+                <div className="grid grid-cols-3 gap-6 mt-6">
+                  <div className="text-center bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl p-4 border-2 border-green-200/50 dark:border-green-500/30">
+                    <div className="text-green-700 dark:text-green-400 font-bold text-sm mb-2">📊 SPREAD</div>
+                    <div className="text-2xl font-black text-green-800 dark:text-green-300 mb-1">-</div>
+                    <div className="text-sm text-green-600 dark:text-green-400">Coming Soon</div>
+                  </div>
+                  
+                  <div className="text-center bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-xl p-4 border-2 border-blue-200/50 dark:border-blue-500/30">
+                    <div className="text-blue-700 dark:text-blue-400 font-bold text-sm mb-2">🎯 TOTAL</div>
+                    <div className="text-2xl font-black text-blue-800 dark:text-blue-300 mb-1">-</div>
+                    <div className="text-sm text-blue-600 dark:text-blue-400">Coming Soon</div>
+                  </div>
+                  
+                  <div className="text-center bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl p-4 border-2 border-purple-200/50 dark:border-purple-500/30">
+                    <div className="text-purple-700 dark:text-purple-400 font-bold text-sm mb-2">💰 MONEYLINE</div>
+                    <div className="text-2xl font-black text-purple-800 dark:text-purple-300 mb-1">-</div>
+                    <div className="text-sm text-purple-600 dark:text-purple-400">Coming Soon</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
       
