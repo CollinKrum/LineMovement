@@ -77,6 +77,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get biggest line movements
+  app.get("/api/line-movements/big-movers", async (req, res) => {
+    try {
+      const hours = parseInt(req.query.hours as string) || 24;
+      const minMovement = parseFloat(req.query.minMovement as string) || 1.0;
+      
+      const bigMovers = await storage.getBigMovers(hours, minMovement);
+      res.json(bigMovers);
+    } catch (error) {
+      console.error("Error fetching big movers:", error);
+      res.status(500).json({ message: "Failed to fetch big movers" });
+    }
+  });
+
   // Sync odds from The Odds API
   app.post('/api/odds/sync', async (req, res) => {
     try {

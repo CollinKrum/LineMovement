@@ -6,7 +6,7 @@ import SportsFilter from "@/components/SportsFilter";
 import GamesList from "@/components/GamesList";
 import SportsbookComparison from "@/components/SportsbookComparison";
 import LineMovementChart from "@/components/LineMovementChart";
-import BigMoversAlert from "@/components/BigMoversAlert";
+import BigMovers from "@/components/BigMovers";
 import QuickAlerts from "@/components/QuickAlerts";
 import TrendingStats from "@/components/TrendingStats";
 
@@ -48,7 +48,7 @@ export default function Dashboard() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <SportsFilter />
         
-        <BigMoversAlert />
+        <BigMovers />
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
