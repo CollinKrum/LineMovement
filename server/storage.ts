@@ -114,16 +114,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUpcomingGames(): Promise<Game[]> {
-    // Show games from today and future (not just strict future)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Show games from last 24 hours and future
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
     
     return await db
       .select()
       .from(games)
       .where(and(
         eq(games.completed, false),
-        gte(games.commenceTime, today)
+        gte(games.commenceTime, yesterday)
       ))
       .orderBy(games.commenceTime)
       .limit(50);
