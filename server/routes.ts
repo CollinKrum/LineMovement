@@ -5,6 +5,29 @@ import { insertUserFavoriteSchema, insertUserAlertSchema } from "../shared/schem
 import { db } from "./db.js";
 import { sql } from "drizzle-orm";
 
+// --- Combined health check (app + DB) ---
+app.get("/api/health", async (_req, res) => {
+  const startedAt = new Date(Date.now() - process.uptime() * 1000).toISOString();
+  try {
+    // Lightweight DB probe
+    const probe = await db.execute(sql`select 1 as db_ok`);
+    const dbOk = Array.isArray(probe?.rows) ? true : !!(probe as any)?.rowCount;
+
+    res.json({
+      ok: true,
+      app: { status: "up", uptimeSeconds: Math.round(process.uptime()), startedAt },
+      db: { ok: dbOk }
+    });
+  } catch (err: any) {
+    res.status(503).json({
+      ok: false,
+      app: { status: "up", uptimeSeconds: Math.round(process.uptime()), startedAt },
+      db: { ok: false, error: String(err?.message || err) }
+    });
+  }
+});
+
+
 /** Register API routes on the provided Express app. */
 export function registerRoutes(app: Express): Express {
   // --- DB ping (debug) ---
