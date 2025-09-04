@@ -1,26 +1,24 @@
 {
   "compilerOptions": {
     "outDir": "./dist",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "target": "ES2022",
     "skipLibCheck": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
-    "types": [],
+    "types": ["node"],
     "baseUrl": ".",
     "paths": {
       "@shared/*": ["../shared/*"]
     }
   },
-  "files": [
+  "include": [
     "./index.ts",
     "./routes.ts",
     "./db.ts",
-    "./storage.ts"
-  ],
-  "include": [
+    "./storage.ts",
     "./services/**/*.ts",
     "../shared/**/*.ts"
   ],
