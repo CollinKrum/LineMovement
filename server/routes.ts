@@ -1,11 +1,26 @@
 import type { Express } from "express";
 import { storage } from "./storage.js";
 import { oddsApiService } from "./services/oddsApi.js";
-import { insertUserFavoriteSchema, insertUserAlertSchema } from "@shared/schema.js";
+import { insertUserFavoriteSchema, insertUserAlertSchema } from "../shared/schema.js";
+import { db } from "./db.js";
+import { sql } from "drizzle-orm";
 
 /** Register API routes on the provided Express app. */
 export function registerRoutes(app: Express): Express {
-  // Sports
+  // --- DB ping (debug) ---
+  app.get("/api/_debug/ping-db", async (_req, res) => {
+    try {
+      const result = await db.execute(
+        sql`select current_catalog as db, current_user as "user", inet_server_addr()::text as host`
+      );
+      res.json({ ok: true, result });
+    } catch (err: any) {
+      console.error("DB ping failed:", err);
+      res.status(500).json({ ok: false, error: String(err?.message || err) });
+    }
+  });
+
+  // --- Sports ---
   app.get("/api/sports", async (_req, res) => {
     try {
       const sports = await storage.getSports();
@@ -38,7 +53,7 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
-  // Games
+  // --- Games ---
   app.get("/api/games", async (req, res) => {
     try {
       const { sport } = req.query;
@@ -53,7 +68,7 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
-  // Line movements: big movers
+  // --- Line movements: big movers (alias) ---
   app.get("/api/line-movements/big-movers", async (req, res) => {
     try {
       const hours = parseInt((req.query.hours as string) ?? "24", 10);
@@ -66,7 +81,7 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
-  // Odds sync
+  // --- Odds sync ---
   app.post("/api/odds/sync", async (req, res) => {
     try {
       const { sport } = req.body as { sport?: string };
@@ -131,7 +146,7 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
-  // Odds by game
+  // --- Odds by game ---
   app.get("/api/games/:gameId/odds", async (req, res) => {
     try {
       const { gameId } = req.params as { gameId: string };
@@ -143,7 +158,7 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
-  // Best odds per market
+  // --- Best odds per market ---
   app.get("/api/games/:gameId/best-odds", async (req, res) => {
     try {
       const { gameId } = req.params as { gameId: string };
@@ -158,7 +173,7 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
-  // Line movement history
+  // --- Line movement history ---
   app.get("/api/games/:gameId/movements", async (req, res) => {
     try {
       const { gameId } = req.params as { gameId: string };
@@ -171,14 +186,14 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
-  // Temporarily disable auth-protected routes
+  // --- Temporarily disabled auth areas ---
   app.get("/api/favorites", async (_req, res) => res.status(501).json({ message: "Favorites not enabled yet" }));
   app.post("/api/favorites/toggle", async (_req, res) => res.status(501).json({ message: "Favorites not enabled yet" }));
   app.get("/api/alerts", async (_req, res) => res.status(501).json({ message: "Alerts not enabled yet" }));
   app.post("/api/alerts", async (_req, res) => res.status(501).json({ message: "Alerts not enabled yet" }));
   app.delete("/api/alerts/:alertId", async (_req, res) => res.status(501).json({ message: "Alerts not enabled yet" }));
 
-  // API usage (optional)
+  // --- Usage (optional passthrough) ---
   app.get("/api/usage", async (_req, res) => {
     try {
       const usage = await oddsApiService.getApiUsage();
@@ -191,4 +206,3 @@ export function registerRoutes(app: Express): Express {
 
   return app;
 }
-
