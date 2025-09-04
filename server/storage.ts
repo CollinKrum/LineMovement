@@ -19,7 +19,7 @@ import {
   type InsertUserFavorite,
   type InsertUserAlert,
 } from "@shared/schema";
-import { db } from "./db";
+import { db } from "./db.js";
 import { eq, desc, and, sql, gte } from "drizzle-orm";
 
 export interface IStorage {
