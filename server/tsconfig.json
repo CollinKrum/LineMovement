@@ -9,12 +9,21 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
-    "types": [],                      // <— important: no vite/client here
+    "types": [],
     "baseUrl": ".",
     "paths": {
       "@shared/*": ["../shared/*"]
     }
   },
-  "include": ["./**/*.ts"],
-  "exclude": ["../client/**", "../node_modules/**"]
+  "include": [
+    "./**/*.ts",
+    "../shared/**/*.ts"        // pull in your shared schema/types
+  ],
+  "exclude": [
+    "./vite.ts",               // dev-only middleware
+    "./replitAuth.ts",         // not needed for API right now
+    "../vite.config.ts",
+    "../client/**",
+    "../node_modules/**"
+  ]
 }
