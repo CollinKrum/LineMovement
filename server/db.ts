@@ -1,12 +1,13 @@
-import { drizzle } from "drizzle-orm/neon-serverless";
-import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
-import * as schema from "@shared/schema.js";
+import { drizzle } from "drizzle-orm/neon-http";
+import { neon } from "@neondatabase/serverless";
+import * as schema from "../shared/schema.js";
 
-if (!process.env.DATABASE_URL) {
-  throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?",
-  );
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+  throw new Error("DATABASE_URL is not set");
 }
 
-const sql: NeonQueryFunction<false, false> = neon(process.env.DATABASE_URL!);
-export const db = drizzle(sql as any, { schema });
+const sql = neon(databaseUrl);
+
+// For drizzle-orm ^0.38 with Neon HTTP:
+export const db = drizzle(sql, { schema });
