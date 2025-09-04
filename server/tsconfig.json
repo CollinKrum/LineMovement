@@ -1,7 +1,6 @@
 {
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./",
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "target": "ES2022",
@@ -15,15 +14,21 @@
       "@shared/*": ["../shared/*"]
     }
   },
+  "files": [
+    "./index.ts",
+    "./routes.ts",
+    "./db.ts",
+    "./storage.ts"
+  ],
   "include": [
-    "./**/*.ts",
-    "../shared/**/*.ts"        // pull in your shared schema/types
+    "./services/**/*.ts",
+    "../shared/**/*.ts"
   ],
   "exclude": [
-    "./vite.ts",               // dev-only middleware
-    "./replitAuth.ts",         // not needed for API right now
-    "../vite.config.ts",
+    "./vite.ts",
+    "./replitAuth.ts",
     "../client/**",
+    "../vite.config.ts",
     "../node_modules/**"
   ]
 }
