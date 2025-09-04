@@ -3,15 +3,9 @@ import { storage } from "./storage";
 import { oddsApiService } from "./services/oddsApi";
 import { insertUserFavoriteSchema, insertUserAlertSchema } from "@shared/schema";
 
-/**
- * Register API routes on the provided Express app.
- * Returns the same app (so index.ts can call app.listen()).
- */
+/** Register API routes on the provided Express app. */
 export function registerRoutes(app: Express): Express {
-  // --- Health (also in index.ts, but handy here if you prefer) ---
-  app.get("/health", (_req, res) => res.json({ ok: true }));
-
-  // --- Sports ---
+  // Sports
   app.get("/api/sports", async (_req, res) => {
     try {
       const sports = await storage.getSports();
@@ -22,7 +16,6 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
-  // Sync sports (from Odds API / SportsGameOdds)
   app.post("/api/sports/sync", async (_req, res) => {
     try {
       const sportsData = await oddsApiService.getSports();
@@ -45,7 +38,7 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
-  // --- Games ---
+  // Games
   app.get("/api/games", async (req, res) => {
     try {
       const { sport } = req.query;
@@ -60,7 +53,7 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
-  // --- Line movements: big movers ---
+  // Line movements: big movers
   app.get("/api/line-movements/big-movers", async (req, res) => {
     try {
       const hours = parseInt((req.query.hours as string) ?? "24", 10);
@@ -73,7 +66,7 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
-  // --- Odds sync (per sport) ---
+  // Odds sync
   app.post("/api/odds/sync", async (req, res) => {
     try {
       const { sport } = req.body as { sport?: string };
@@ -110,25 +103,22 @@ export function registerRoutes(app: Express): Express {
           for (const market of bookmaker.markets) {
             for (const outcome of market.outcomes) {
               let outcomeType = "";
-              if (market.key === "h2h") {
-                outcomeType = outcome.name === event.home_team ? "home" : "away";
-              } else if (market.key === "spreads") {
+              if (market.key === "h2h" || market.key === "spreads") {
                 outcomeType = outcome.name === event.home_team ? "home" : "away";
               } else if (market.key === "totals") {
                 outcomeType = outcome.name === "Over" ? "over" : "under";
               }
+              if (!outcomeType) continue;
 
-              if (outcomeType) {
-                await storage.upsertOdds({
-                  gameId: event.id,
-                  bookmakerId: bookmaker.key,
-                  market: market.key,
-                  outcomeType,
-                  price: String(outcome.price),
-                  point: outcome.point != null ? String(outcome.point) : null,
-                });
-                oddsUpdated++;
-              }
+              await storage.upsertOdds({
+                gameId: event.id,
+                bookmakerId: bookmaker.key,
+                market: market.key,
+                outcomeType,
+                price: String(outcome.price),
+                point: outcome.point != null ? String(outcome.point) : null,
+              });
+              oddsUpdated++;
             }
           }
         }
@@ -141,7 +131,7 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
-  // --- Odds by game ---
+  // Odds by game
   app.get("/api/games/:gameId/odds", async (req, res) => {
     try {
       const { gameId } = req.params as { gameId: string };
@@ -153,7 +143,7 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
-  // --- Best odds per market ---
+  // Best odds per market
   app.get("/api/games/:gameId/best-odds", async (req, res) => {
     try {
       const { gameId } = req.params as { gameId: string };
@@ -168,7 +158,7 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
-  // --- Line movement history ---
+  // Line movement history
   app.get("/api/games/:gameId/movements", async (req, res) => {
     try {
       const { gameId } = req.params as { gameId: string };
@@ -181,25 +171,14 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
-  // --- (Temporarily disable auth-protected routes) ---
-  // You can re-enable these once auth is wired in a later step.
-  app.get("/api/favorites", async (_req, res) => {
-    res.status(501).json({ message: "Favorites not enabled yet" });
-  });
-  app.post("/api/favorites/toggle", async (_req, res) => {
-    res.status(501).json({ message: "Favorites not enabled yet" });
-  });
-  app.get("/api/alerts", async (_req, res) => {
-    res.status(501).json({ message: "Alerts not enabled yet" });
-  });
-  app.post("/api/alerts", async (_req, res) => {
-    res.status(501).json({ message: "Alerts not enabled yet" });
-  });
-  app.delete("/api/alerts/:alertId", async (_req, res) => {
-    res.status(501).json({ message: "Alerts not enabled yet" });
-  });
+  // Temporarily disable auth-protected routes
+  app.get("/api/favorites", async (_req, res) => res.status(501).json({ message: "Favorites not enabled yet" }));
+  app.post("/api/favorites/toggle", async (_req, res) => res.status(501).json({ message: "Favorites not enabled yet" }));
+  app.get("/api/alerts", async (_req, res) => res.status(501).json({ message: "Alerts not enabled yet" }));
+  app.post("/api/alerts", async (_req, res) => res.status(501).json({ message: "Alerts not enabled yet" }));
+  app.delete("/api/alerts/:alertId", async (_req, res) => res.status(501).json({ message: "Alerts not enabled yet" }));
 
-  // --- API usage (optional) ---
+  // API usage (optional)
   app.get("/api/usage", async (_req, res) => {
     try {
       const usage = await oddsApiService.getApiUsage();
@@ -212,3 +191,4 @@ export function registerRoutes(app: Express): Express {
 
   return app;
 }
+
