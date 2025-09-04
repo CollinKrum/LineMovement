@@ -18,7 +18,7 @@ import {
   type UserAlert,
   type InsertUserFavorite,
   type InsertUserAlert,
-} from "@shared/schema";
+} from "@shared/schema.js";
 import { db } from "./db.js";
 import { eq, desc, and, sql, gte } from "drizzle-orm";
 
