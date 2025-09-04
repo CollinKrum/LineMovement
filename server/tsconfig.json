@@ -2,13 +2,13 @@
   "compilerOptions": {
     "outDir": "./dist",
     "module": "ESNext",
-    "moduleResolution": "Bundler",
+    "moduleResolution": "Node",
     "target": "ES2022",
     "skipLibCheck": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
-    "types": [],
+    "types": ["node"],
     "baseUrl": ".",
     "paths": {
       "@shared/*": ["../shared/*"]
