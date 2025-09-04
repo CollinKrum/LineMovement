@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { storage } from "./storage.js";
 import { oddsApiService } from "./services/oddsApi.js";
-import { insertUserFavoriteSchema, insertUserAlertSchema } from "@shared/schema";
+import { insertUserFavoriteSchema, insertUserAlertSchema } from "@shared/schema.js";
 
 /** Register API routes on the provided Express app. */
 export function registerRoutes(app: Express): Express {
