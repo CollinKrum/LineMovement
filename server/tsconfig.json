@@ -1,23 +1,9 @@
 {
   "compilerOptions": {
-    "outDir": "./dist",
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "skipLibCheck": true,
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "strict": true,
-    "verbatimModuleSyntax": true,
-    "types": ["node"],
-    "baseUrl": ".",
-    "paths": {
-      "@shared/*": ["../shared/*"],
-      "drizzle-orm": ["./node_modules/drizzle-orm"],
-      "drizzle-orm/*": ["./node_modules/drizzle-orm/*"],
-      "drizzle-zod": ["./node_modules/drizzle-zod"],
-      "zod": ["./node_modules/zod"]
-    }
+-   "outDir": "./dist",
++   "outDir": "../dist",
++   "rootDir": "../",
+    ...
   },
   "include": [
     "./index.ts",
@@ -26,7 +12,8 @@
     "./storage.ts",
     "./services/**/*.ts",
     "../shared/**/*.ts"
-  ],
+  ]
+}
   "exclude": [
     "./vite.ts",
     "./replitAuth.ts",
