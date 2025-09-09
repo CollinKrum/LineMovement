@@ -5,8 +5,6 @@ import { oddsApiService } from "./services/oddsApi.js";            // SportsGame
 import { arbitrageApiService } from "./services/arbitrageApi.js";  // RapidAPI sportsbook-api2
 import { db } from "./db.js";
 import { sql } from "drizzle-orm";
-// If you enable favorites/alerts later, re-add these and their routes:
-// import { insertUserFavoriteSchema, insertUserAlertSchema } from "../shared/schema.js";
 
 /** Register API routes on the provided Express app. */
 export function registerRoutes(app: Express): Express {
@@ -71,7 +69,7 @@ export function registerRoutes(app: Express): Express {
   app.get("/api/_debug/sgo-events", async (req, res) => {
     try {
       const sport = (req.query.sport as string) || "NFL";
-      const events = await oddsApiService.getOdds(sport, 5, 1);
+      const events = await oddsApiService.getOdds(sport, 5, 1); // (sport, limit, maxPages)
       res.json({ ok: true, sport, count: events.length, sample: events.slice(0, 2) });
     } catch (error: any) {
       res.status(500).json({
@@ -99,10 +97,7 @@ export function registerRoutes(app: Express): Express {
   app.post("/api/sports/sync", async (_req, res) => {
     try {
       const leagues = await oddsApiService.getSports(); // from SGO
-      // Optionally filter to major US leagues by ID if desired:
-      // const major = new Set(["NFL","NBA","MLB","NHL","NCAAF","NCAAB"]);
-      // const filtered = leagues.filter(l => major.has(l.key));
-      const filtered = leagues;
+      const filtered = leagues; // keep all; optionally filter to major leagues
 
       for (const league of filtered) {
         await storage.upsertSport({
@@ -137,13 +132,16 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
-  // Pull odds from SGO and upsert into DB
+  // Pull odds from SGO and upsert into DB (supports limit & maxPages via query params)
   app.post("/api/odds/sync", async (req, res) => {
     try {
       const { sport } = req.body as { sport?: string };
       if (!sport) return res.status(400).json({ message: "Sport parameter is required" });
 
-      const oddsData = await oddsApiService.getOdds(sport);
+      const limit = Math.max(1, parseInt(String(req.query.limit ?? "25"), 10));       // default 25 per page
+      const maxPages = Math.max(1, parseInt(String(req.query.maxPages ?? "1"), 10));  // default 1 page
+
+      const oddsData = await oddsApiService.getOdds(sport, limit, maxPages);
       let gamesUpdated = 0;
       let oddsUpdated = 0;
 
@@ -197,6 +195,9 @@ export function registerRoutes(app: Express): Express {
 
       res.json({
         message: `Synced ${gamesUpdated} games and ${oddsUpdated} odds entries`,
+        sport,
+        limit,
+        maxPages,
         gamesUpdated,
         oddsUpdated,
       });
@@ -273,7 +274,6 @@ export function registerRoutes(app: Express): Express {
   // =========================
   app.get("/api/arbitrage", async (req, res) => {
     try {
-      // type can be ARBITRAGE, MIDDLE, etc. (depends on provider docs)
       const type = (req.query.type as string) || "ARBITRAGE";
       const data = await arbitrageApiService.getArbitrage(type);
       res.json(data);
