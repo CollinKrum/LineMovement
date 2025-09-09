@@ -13,7 +13,7 @@ export async function apiRequest(
   data?: unknown | undefined,
 ): Promise<Response> {
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE || "https://linemovement.onrender.com";
+  import.meta.env.VITE_API_BASE || "https://linemovement.onrender.com";
 
 export async function apiRequest(
   method: string,
