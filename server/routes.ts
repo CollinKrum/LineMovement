@@ -480,6 +480,61 @@ app.get("/api/games/:gameId/best-odds/summary", async (req, res) => {
   }
 });
   
+ // --- Upcoming games with best-odds summary (UI-friendly feed) ---
+app.get("/api/games/with-best", async (req, res) => {
+  try {
+    const market = (req.query.market as string) || "point_spread";
+    const limit = Math.min(parseInt((req.query.limit as string) ?? "25", 10) || 25, 100);
+
+    // 1) get upcoming games
+    const games = await storage.getUpcomingGames();
+
+    // 2) compute best odds per game for requested market
+    const rows: any[] = [];
+    for (const g of games.slice(0, limit)) {
+      const all = await storage.getOddsByGame(g.id);
+      const mktRows = all.filter((r: any) => r.market === market);
+
+      const best = mktRows.reduce(
+        (acc: any, row: any) => {
+          const side = row.outcomeType; // home | away | over | under
+          const priceNum = Number(row.price);
+          if (!Number.isFinite(priceNum)) return acc;
+          if (!acc[side] || priceNum > Number(acc[side].price)) {
+            acc[side] = {
+              price: row.price,
+              point: row.point,
+              bookmakerId: row.bookmakerId,
+              bookmakerTitle: row.bookmakerTitle ?? row.bookmakerId,
+              lastUpdate: row.lastUpdate ?? null,
+            };
+          }
+          return acc;
+        },
+        {} as Record<string, any>
+      );
+
+      rows.push({
+        id: g.id,
+        sportId: g.sportId,
+        homeTeam: g.homeTeam,
+        awayTeam: g.awayTeam,
+        commenceTime: g.commenceTime,
+        market,
+        bestHome: best.home ?? null,
+        bestAway: best.away ?? null,
+        bestOver: best.over ?? null,
+        bestUnder: best.under ?? null,
+      });
+    }
+
+    res.json({ count: rows.length, games: rows });
+  } catch (err) {
+    console.error("Error in /api/games/with-best:", err);
+    res.status(500).json({ message: "Failed to build games + best odds feed" });
+  }
+}); 
+  
   // =========================
   // Placeholders for auth features (disabled)
   // =========================
