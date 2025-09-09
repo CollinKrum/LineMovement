@@ -131,6 +131,7 @@ export function registerRoutes(app: Express): Express {
 
   // Pull odds from SGO and upsert into DB (supports limit & maxPages via query params)
   // Falls back to RapidAPI arbitrage read-through on SGO 429
+  // NEW: ?forceFallback=1 to always use RapidAPI (no DB writes)
   app.post("/api/odds/sync", async (req, res) => {
     try {
       const { sport } = req.body as { sport?: string };
@@ -138,9 +139,25 @@ export function registerRoutes(app: Express): Express {
 
       const limit = Math.max(1, parseInt(String(req.query.limit ?? "25"), 10));       // default 25 per page
       const maxPages = Math.max(1, parseInt(String(req.query.maxPages ?? "1"), 10));  // default 1 page
+      const forceFallback = String(req.query.forceFallback ?? "0") === "1";
 
       let oddsData: any[] = [];
       try {
+        if (forceFallback) {
+          const arbType = (req.query.fallbackType as string) || "ARBITRAGE";
+          const arb = await arbitrageApiService.getArbitrage(arbType);
+          return res.json({
+            message: "Forced RapidAPI arbitrage fallback (no DB writes).",
+            fallbackUsed: "rapidapi-arbitrage",
+            sport,
+            limit,
+            maxPages,
+            arbitrageCount: Array.isArray(arb?.advantages) ? arb.advantages.length : 0,
+            arbitrageSample: Array.isArray(arb?.advantages) ? arb.advantages.slice(0, 2) : arb
+          });
+        }
+
+        // Normal path: try SGO first
         oddsData = await oddsApiService.getOdds(sport, limit, maxPages);
       } catch (err: any) {
         const status = err?.status ?? err?.response?.status ?? null;
@@ -336,4 +353,3 @@ export function registerRoutes(app: Express): Express {
 
   return app;
 }
-
