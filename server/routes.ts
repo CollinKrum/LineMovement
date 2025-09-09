@@ -373,7 +373,7 @@ export function registerRoutes(app: Express): Express {
           completed: false,
           homeScore: null,
           awayScore: null,
-          updatedAt: new Date(),
+          lastUpdated: new Date(),
         });
         gamesUpserted++;
 
