@@ -331,6 +331,106 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
+  // --- Seed DB from RapidAPI arbitrage (temporary helper) ---
+  app.post("/api/arbitrage/seed-db", async (req, res) => {
+    try {
+      const type = (req.query.type as string) || "ARBITRAGE";
+      const limit = Math.max(1, parseInt(String(req.query.limit ?? "10"), 10));
+
+      // pull arbitrage snapshot
+      const data = await arbitrageApiService.getArbitrage(type);
+      const list: any[] = Array.isArray(data?.advantages) ? data.advantages.slice(0, limit) : [];
+
+      let gamesUpserted = 0;
+      let oddsUpserted = 0;
+      let booksUpserted = 0;
+
+      for (const adv of list) {
+        const ev = adv?.market?.event;
+        if (!ev?.key) continue;
+
+        // synthesize IDs/fields to match our schema
+        const gameId = String(ev.key);
+        const sportId =
+          ev?.competitionInstance?.competition?.shortName ||
+          ev?.participants?.[0]?.sport ||
+          "GENERIC";
+        const homeTeam = (ev?.participants || []).find((p: any) => p.key === ev.homeParticipantKey)?.name
+          || ev?.participants?.[0]?.name
+          || "Home";
+        const awayTeam = (ev?.participants || []).find((p: any) => p.key !== ev.homeParticipantKey)?.name
+          || ev?.participants?.[1]?.name
+          || "Away";
+        const commenceTime = ev.startTime ? new Date(ev.startTime) : new Date();
+
+        // upsert game
+        await storage.upsertGame({
+          id: gameId,
+          sportId,
+          homeTeam,
+          awayTeam,
+          commenceTime,
+          completed: false,
+          homeScore: null,
+          awayScore: null,
+          updatedAt: new Date(),
+        });
+        gamesUpserted++;
+
+        // outcomes contain per-book edges we can treat like “bookmaker quotes”
+        for (const out of adv?.outcomes || []) {
+          const bookmakerKey = String(out.source || "UNKNOWN");
+          const bookmakerTitle = String(out.source || "Unknown Book");
+
+          // upsert bookmaker
+          await storage.upsertBookmaker({
+            id: bookmakerKey,
+            title: bookmakerTitle,
+            lastUpdate: new Date(out.lastFoundAt || out.readAt || new Date()),
+          });
+          booksUpserted++;
+
+          // map arbitrage outcome to a market+outcome
+          const marketKey = (adv?.market?.type || "H2H").toLowerCase(); // e.g., BOTH_TEAMS_TO_SCORE
+          const outcomeType = (() => {
+            // try to map YES/NO → over/under, else home/away buckets
+            const t = String(out.type || "").toLowerCase();
+            if (t === "yes" || t === "over") return "over";
+            if (t === "no" || t === "under") return "under";
+            // fallback to “home/away” split by participantKey if present
+            if (out.participantKey && out.participantKey === ev.homeParticipantKey) return "home";
+            if (out.participantKey && out.participantKey !== ev.homeParticipantKey) return "away";
+            return "home";
+          })();
+
+          // RapidAPI gives payout (decimal) rather than American odds — store as string
+          await storage.upsertOdds({
+            gameId,
+            bookmakerId: bookmakerKey,
+            market: marketKey,
+            outcomeType,
+            price: String(out.payout), // decimal odds
+            point: null,
+          });
+          oddsUpserted++;
+        }
+      }
+
+      return res.json({
+        ok: true,
+        type,
+        seededFrom: "rapidapi-arbitrage",
+        count: list.length,
+        gamesUpserted,
+        booksUpserted,
+        oddsUpserted,
+      });
+    } catch (err: any) {
+      console.error("Seed from RapidAPI failed:", err);
+      return res.status(500).json({ ok: false, message: "Seed from RapidAPI failed", error: String(err?.message || err) });
+    }
+  });
+
   // =========================
   // Placeholders for auth features (disabled)
   // =========================
