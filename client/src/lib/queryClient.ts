@@ -1,38 +1,50 @@
 import { QueryClient } from "@tanstack/react-query";
 
-export const queryClient = new QueryClient();
+/**
+ * Point the frontend to the backend.
+ * Locally, you can run the API on http://localhost:3000 (or whatever you use).
+ * In Vercel prod, set VITE_API_BASE=https://linemovement.onrender.com
+ */
+export const API_BASE =
+  import.meta.env.VITE_API_BASE?.replace(/\/+$/, "") ||
+  (import.meta.env.DEV ? "http://localhost:3000" : "https://linemovement.onrender.com");
 
-// Base URL for the API (can be overridden in Vercel env as VITE_API_BASE)
-const API_BASE =
-  import.meta.env.VITE_API_BASE ?? "https://linemovement.onrender.com";
+/** Build an absolute URL from a relative path or passthrough absolute URLs */
+function toUrl(pathOrUrl: string) {
+  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+  const path = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
+  return `${API_BASE}${path}`;
+}
 
-/** Throw if a fetch Response is not ok */
-async function throwIfNotOk(res: Response) {
+export async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    const msg = `${res.status} ${res.statusText}${text ? ` - ${text}` : ""}`;
-    throw new Error(msg);
+    throw new Error(`HTTP ${res.status} ${res.statusText}${text ? ` - ${text}` : ""}`);
   }
 }
 
-/** Simple wrapper that prefixes API_BASE and handles JSON bodies */
+/** Single place all requests go through */
 export async function apiRequest(
-  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
-  path: string, // e.g. "/api/health" or "/api/games"
+  method: string,
+  url: string,
   data?: unknown
 ): Promise<Response> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(toUrl(url), {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
     body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
+    credentials: "include", // keep if your API uses cookies/sessions
   });
-  await throwIfNotOk(res);
+  await throwIfResNotOk(res);
   return res;
 }
 
-// tiny helpers if you like
+// Small helpers (optional)
 export const api = {
-  get: (p: string) => apiRequest("GET", p),
-  post: (p: string, b?: unknown) => apiRequest("POST", p, b),
+  get: (url: string) => apiRequest("GET", url),
+  post: (url: string, body?: unknown) => apiRequest("POST", url, body),
+  put: (url: string, body?: unknown) => apiRequest("PUT", url, body),
+  del: (url: string) => apiRequest("DELETE", url),
 };
+
+export const queryClient = new QueryClient();
