@@ -1,20 +1,32 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect } from "wouter";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { queryClient } from "./lib/queryClient";
-import Dashboard from "./pages/dashboard";
-import Landing from "./pages/landing";
-import NotFound from "./pages/not-found";
+import { queryClient } from "@/lib/queryClient";
+import Landing from "@/pages/landing";
+import Dashboard from "@/pages/dashboard";
+import { Toaster } from "@/components/ui/toaster";
 
-function App() {
+export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <Switch>
+        {/* Home / Landing */}
         <Route path="/" component={Landing} />
+
+        {/* Dashboard */}
         <Route path="/dashboard" component={Dashboard} />
-        <Route component={NotFound} />
+
+        {/* Legacy or convenience paths */}
+        <Route path="/app">
+          <Redirect to="/dashboard" />
+        </Route>
+
+        {/* Catch-all → landing (or your NotFound page if you prefer) */}
+        <Route>
+          <Redirect to="/" />
+        </Route>
       </Switch>
+
+      <Toaster />
     </QueryClientProvider>
   );
 }
-
-export default App;
