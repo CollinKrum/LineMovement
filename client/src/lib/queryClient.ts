@@ -12,7 +12,18 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const res = await fetch(url, {
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE || "https://linemovement.onrender.com";
+
+export async function apiRequest(
+  method: string,
+  url: string,
+  data?: unknown,
+): Promise<Response> {
+  // Ensure the URL always points to the backend
+  const fullUrl = url.startsWith("http") ? url : `${API_BASE}${url}`;
+
+  const res = await fetch(fullUrl, {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
     body: data ? JSON.stringify(data) : undefined,
