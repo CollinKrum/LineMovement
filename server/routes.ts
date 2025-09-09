@@ -1,4 +1,3 @@
-// server/routes.ts
 import type { Express } from "express";
 import { storage } from "./storage.js";
 import { oddsApiService } from "./services/oddsApi.js";            // SportsGameOdds (primary)
@@ -337,4 +336,4 @@ export function registerRoutes(app: Express): Express {
 
   return app;
 }
-```0
+
