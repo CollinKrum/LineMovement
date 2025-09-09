@@ -429,7 +429,57 @@ export function registerRoutes(app: Express): Express {
       return res.status(500).json({ ok: false, message: "Seed from RapidAPI failed", error: String(err?.message || err) });
     }
   });
+    
+  // --- Best odds summary (returns the single best HOME and AWAY price) ---
+app.get("/api/games/:gameId/best-odds/summary", async (req, res) => {
+  try {
+    const { gameId } = req.params as { gameId: string };
+    const market = (req.query.market as string) || "point_spread";
 
+    // Pull all odds for this game & market
+    const all = await storage.getOddsByGame(gameId);
+
+    // Filter to target market only
+    const rows = all.filter((r: any) => r.market === market);
+
+    // Reduce to best per outcome
+    const best = rows.reduce(
+      (acc: any, row: any) => {
+        const side = row.outcomeType; // 'home' | 'away' | 'over' | 'under'
+        const priceNum = Number(row.price);
+        if (!Number.isFinite(priceNum)) return acc;
+
+        if (!acc[side] || priceNum > Number(acc[side].price)) {
+          acc[side] = {
+            gameId: row.gameId,
+            market: row.market,
+            outcomeType: row.outcomeType,
+            price: row.price,
+            point: row.point,
+            bookmakerId: row.bookmakerId,
+            bookmakerTitle: row.bookmakerTitle ?? row.bookmakerId,
+            lastUpdate: row.lastUpdate ?? null,
+          };
+        }
+        return acc;
+      },
+      {} as Record<string, any>
+    );
+
+    res.json({
+      gameId,
+      market,
+      bestHome: best.home ?? null,
+      bestAway: best.away ?? null,
+      bestOver: best.over ?? null,
+      bestUnder: best.under ?? null,
+    });
+  } catch (error) {
+    console.error("Error fetching best-odds summary:", error);
+    res.status(500).json({ message: "Failed to fetch best-odds summary" });
+  }
+});
+  
   // =========================
   // Placeholders for auth features (disabled)
   // =========================
