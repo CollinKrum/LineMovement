@@ -1,8 +1,8 @@
 // server/routes.ts
 import type { Express } from "express";
 import { storage } from "./storage.js";
-import { oddsApiService } from "./services/oddsApi.js";            // SportsGameOdds
-import { arbitrageApiService } from "./services/arbitrageApi.js";  // RapidAPI sportsbook-api2
+import { oddsApiService } from "./services/oddsApi.js";            // SportsGameOdds (primary)
+import { arbitrageApiService } from "./services/arbitrageApi.js";  // RapidAPI sportsbook-api2 (fallback/read)
 import { db } from "./db.js";
 import { sql } from "drizzle-orm";
 
@@ -97,9 +97,7 @@ export function registerRoutes(app: Express): Express {
   app.post("/api/sports/sync", async (_req, res) => {
     try {
       const leagues = await oddsApiService.getSports(); // from SGO
-      const filtered = leagues; // keep all; optionally filter to major leagues
-
-      for (const league of filtered) {
+      for (const league of leagues) {
         await storage.upsertSport({
           id: league.key,           // e.g. "NFL"
           title: league.title,      // e.g. "NFL"
@@ -108,7 +106,7 @@ export function registerRoutes(app: Express): Express {
           hasOutrights: league.has_outrights,
         });
       }
-      res.json({ message: `Synced ${filtered.length} sports` });
+      res.json({ message: `Synced ${leagues.length} sports` });
     } catch (error) {
       console.error("Error syncing sports:", error);
       res.status(500).json({ message: "Failed to sync sports" });
@@ -116,7 +114,7 @@ export function registerRoutes(app: Express): Express {
   });
 
   // =========================
-  // Games & Odds (SGO)
+  // Games & Odds (SGO primary; RapidAPI fallback)
   // =========================
   app.get("/api/games", async (req, res) => {
     try {
@@ -133,6 +131,7 @@ export function registerRoutes(app: Express): Express {
   });
 
   // Pull odds from SGO and upsert into DB (supports limit & maxPages via query params)
+  // Falls back to RapidAPI arbitrage read-through on SGO 429
   app.post("/api/odds/sync", async (req, res) => {
     try {
       const { sport } = req.body as { sport?: string };
@@ -141,7 +140,39 @@ export function registerRoutes(app: Express): Express {
       const limit = Math.max(1, parseInt(String(req.query.limit ?? "25"), 10));       // default 25 per page
       const maxPages = Math.max(1, parseInt(String(req.query.maxPages ?? "1"), 10));  // default 1 page
 
-      const oddsData = await oddsApiService.getOdds(sport, limit, maxPages);
+      let oddsData: any[] = [];
+      try {
+        oddsData = await oddsApiService.getOdds(sport, limit, maxPages);
+      } catch (err: any) {
+        const status = err?.status ?? err?.response?.status ?? null;
+        if (status === 429) {
+          // RapidAPI fallback (no DB writes; just returns data so you can see something)
+          try {
+            const arbType = (req.query.fallbackType as string) || "ARBITRAGE";
+            const arb = await arbitrageApiService.getArbitrage(arbType);
+            return res.json({
+              message: "SGO rate-limited (429). Returned RapidAPI arbitrage as fallback (no DB writes).",
+              fallbackUsed: "rapidapi-arbitrage",
+              sport,
+              limit,
+              maxPages,
+              arbitrageCount: Array.isArray(arb?.advantages) ? arb.advantages.length : 0,
+              arbitrageSample: Array.isArray(arb?.advantages) ? arb.advantages.slice(0, 2) : arb
+            });
+          } catch (fallbackErr: any) {
+            return res.status(502).json({
+              message: "SGO rate-limited and RapidAPI fallback also failed",
+              providerStatus: status,
+              providerError: String(err?.body || err?.message || err),
+              fallbackError: String(fallbackErr?.message || fallbackErr)
+            });
+          }
+        }
+        // Not a 429 → rethrow to outer catch
+        throw err;
+      }
+
+      // If we got here, SGO returned data → proceed with DB writes
       let gamesUpdated = 0;
       let oddsUpdated = 0;
 
@@ -200,6 +231,7 @@ export function registerRoutes(app: Express): Express {
         maxPages,
         gamesUpdated,
         oddsUpdated,
+        fallbackUsed: null
       });
     } catch (error: any) {
       const status = error?.status ?? error?.response?.status ?? null;
@@ -305,3 +337,4 @@ export function registerRoutes(app: Express): Express {
 
   return app;
 }
+```0
