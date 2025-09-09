@@ -1,9 +1,12 @@
+// server/routes.ts
 import type { Express } from "express";
 import { storage } from "./storage.js";
-import { oddsApiService } from "./services/oddsApi.js";
-import { insertUserFavoriteSchema, insertUserAlertSchema } from "../shared/schema.js";
+import { oddsApiService } from "./services/oddsApi.js";            // SportsGameOdds
+import { arbitrageApiService } from "./services/arbitrageApi.js";  // RapidAPI sportsbook-api2
 import { db } from "./db.js";
 import { sql } from "drizzle-orm";
+// If you enable favorites/alerts later, re-add these and their routes:
+// import { insertUserFavoriteSchema, insertUserAlertSchema } from "../shared/schema.js";
 
 /** Register API routes on the provided Express app. */
 export function registerRoutes(app: Express): Express {
@@ -41,7 +44,48 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
-  // --- Sports ---
+  // --- Debug odds config (env flags + local sport keys) ---
+  app.get("/api/_debug/odds-config", async (_req, res) => {
+    try {
+      const hasSGO = Boolean(process.env.SPORTSGAMEODDS_API_KEY);
+      const hasRapid = Boolean(process.env.RAPIDAPI_KEY);
+      const sports = await storage.getSports().catch(() => []);
+      const keys = Array.isArray(sports)
+        ? sports.map((s: any) => s.id ?? s.key ?? s.leagueID ?? s.sportID).filter(Boolean)
+        : [];
+
+      res.json({
+        ok: true,
+        env: {
+          SPORTSGAMEODDS_API_KEY_set: hasSGO,
+          RAPIDAPI_KEY_set: hasRapid,
+        },
+        knownSportKeys: keys.slice(0, 50),
+      });
+    } catch (err: any) {
+      res.status(500).json({ ok: false, error: String(err?.message || err) });
+    }
+  });
+
+  // --- Quick sample pull from SGO (helps debug keys/network) ---
+  app.get("/api/_debug/sgo-events", async (req, res) => {
+    try {
+      const sport = (req.query.sport as string) || "NFL";
+      const events = await oddsApiService.getOdds(sport, 5, 1);
+      res.json({ ok: true, sport, count: events.length, sample: events.slice(0, 2) });
+    } catch (error: any) {
+      res.status(500).json({
+        ok: false,
+        error: String(error?.message || error),
+        status: error?.status ?? null,
+        body: error?.body ?? null,
+      });
+    }
+  });
+
+  // =========================
+  // Sports (SGO)
+  // =========================
   app.get("/api/sports", async (_req, res) => {
     try {
       const sports = await storage.getSports();
@@ -54,17 +98,19 @@ export function registerRoutes(app: Express): Express {
 
   app.post("/api/sports/sync", async (_req, res) => {
     try {
-      const sportsData = await oddsApiService.getSports();
-      const majorSports = ["NFL", "NBA", "MLB", "NHL", "NCAAF", "NCAAB"];
-      const filtered = sportsData.filter((s: any) => majorSports.includes(s.key));
+      const leagues = await oddsApiService.getSports(); // from SGO
+      // Optionally filter to major US leagues by ID if desired:
+      // const major = new Set(["NFL","NBA","MLB","NHL","NCAAF","NCAAB"]);
+      // const filtered = leagues.filter(l => major.has(l.key));
+      const filtered = leagues;
 
-      for (const sport of filtered) {
+      for (const league of filtered) {
         await storage.upsertSport({
-          id: sport.key,
-          title: sport.title,
-          description: sport.description,
-          active: sport.active,
-          hasOutrights: sport.has_outrights,
+          id: league.key,           // e.g. "NFL"
+          title: league.title,      // e.g. "NFL"
+          description: league.description,
+          active: league.active,
+          hasOutrights: league.has_outrights,
         });
       }
       res.json({ message: `Synced ${filtered.length} sports` });
@@ -74,7 +120,9 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
-  // --- Games ---
+  // =========================
+  // Games & Odds (SGO)
+  // =========================
   app.get("/api/games", async (req, res) => {
     try {
       const { sport } = req.query;
@@ -89,20 +137,7 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
-  // --- Line movements: big movers (alias) ---
-  app.get("/api/line-movements/big-movers", async (req, res) => {
-    try {
-      const hours = parseInt((req.query.hours as string) ?? "24", 10);
-      const minMovement = parseFloat((req.query.minMovement as string) ?? "1.0");
-      const bigMovers = await storage.getBigMovers(hours, minMovement);
-      res.json(bigMovers);
-    } catch (error) {
-      console.error("Error fetching big movers:", error);
-      res.status(500).json({ message: "Failed to fetch big movers" });
-    }
-  });
-
-  // --- Odds sync ---
+  // Pull odds from SGO and upsert into DB
   app.post("/api/odds/sync", async (req, res) => {
     try {
       const { sport } = req.body as { sport?: string };
@@ -126,7 +161,7 @@ export function registerRoutes(app: Express): Express {
         });
         gamesUpdated++;
 
-        for (const bookmaker of event.bookmakers) {
+        for (const bookmaker of event.bookmakers || []) {
           const lastUpdate = bookmaker.last_update ? new Date(bookmaker.last_update) : new Date();
           if (isNaN(lastUpdate.getTime())) continue;
 
@@ -136,13 +171,13 @@ export function registerRoutes(app: Express): Express {
             lastUpdate,
           });
 
-          for (const market of bookmaker.markets) {
-            for (const outcome of market.outcomes) {
+          for (const market of bookmaker.markets || []) {
+            for (const outcome of market.outcomes || []) {
               let outcomeType = "";
               if (market.key === "h2h" || market.key === "spreads") {
                 outcomeType = outcome.name === event.home_team ? "home" : "away";
               } else if (market.key === "totals") {
-                outcomeType = outcome.name === "Over" ? "over" : "under";
+                outcomeType = outcome.name?.toLowerCase() === "over" ? "over" : "under";
               }
               if (!outcomeType) continue;
 
@@ -160,14 +195,27 @@ export function registerRoutes(app: Express): Express {
         }
       }
 
-      res.json({ message: `Synced ${gamesUpdated} games and ${oddsUpdated} odds entries`, gamesUpdated, oddsUpdated });
-    } catch (error) {
-      console.error("Error syncing odds:", error);
-      res.status(500).json({ message: "Failed to sync odds" });
+      res.json({
+        message: `Synced ${gamesUpdated} games and ${oddsUpdated} odds entries`,
+        gamesUpdated,
+        oddsUpdated,
+      });
+    } catch (error: any) {
+      const status = error?.status ?? error?.response?.status ?? null;
+      const body = error?.body ?? error?.response?.data ?? null;
+      console.error("Error syncing odds:", status, body || error);
+      res.status(500).json({
+        message: "Failed to sync odds",
+        providerStatus: status,
+        providerError:
+          typeof body === "string"
+            ? body.slice(0, 500)
+            : (body?.message ?? String(error?.message || error)).slice(0, 500),
+      });
     }
   });
 
-  // --- Odds by game ---
+  // Odds for a specific game
   app.get("/api/games/:gameId/odds", async (req, res) => {
     try {
       const { gameId } = req.params as { gameId: string };
@@ -179,7 +227,7 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
-  // --- Best odds per market ---
+  // Best odds per market
   app.get("/api/games/:gameId/best-odds", async (req, res) => {
     try {
       const { gameId } = req.params as { gameId: string };
@@ -194,7 +242,7 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
-  // --- Line movement history ---
+  // Line movement history
   app.get("/api/games/:gameId/movements", async (req, res) => {
     try {
       const { gameId } = req.params as { gameId: string };
@@ -207,14 +255,44 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
-  // --- Temporarily disabled auth areas ---
+  // Alias for big movers
+  app.get("/api/line-movements/big-movers", async (req, res) => {
+    try {
+      const hours = parseInt((req.query.hours as string) ?? "24", 10);
+      const minMovement = parseFloat((req.query.minMovement as string) ?? "1.0");
+      const bigMovers = await storage.getBigMovers(hours, minMovement);
+      res.json(bigMovers);
+    } catch (error) {
+      console.error("Error fetching big movers:", error);
+      res.status(500).json({ message: "Failed to fetch big movers" });
+    }
+  });
+
+  // =========================
+  // Arbitrage (RapidAPI sportsbook-api2)
+  // =========================
+  app.get("/api/arbitrage", async (req, res) => {
+    try {
+      // type can be ARBITRAGE, MIDDLE, etc. (depends on provider docs)
+      const type = (req.query.type as string) || "ARBITRAGE";
+      const data = await arbitrageApiService.getArbitrage(type);
+      res.json(data);
+    } catch (err: any) {
+      console.error("Failed to fetch arbitrage:", err);
+      res.status(500).json({ message: "Failed to fetch arbitrage", error: String(err?.message || err) });
+    }
+  });
+
+  // =========================
+  // Placeholders for auth features (disabled)
+  // =========================
   app.get("/api/favorites", async (_req, res) => res.status(501).json({ message: "Favorites not enabled yet" }));
   app.post("/api/favorites/toggle", async (_req, res) => res.status(501).json({ message: "Favorites not enabled yet" }));
   app.get("/api/alerts", async (_req, res) => res.status(501).json({ message: "Alerts not enabled yet" }));
   app.post("/api/alerts", async (_req, res) => res.status(501).json({ message: "Alerts not enabled yet" }));
   app.delete("/api/alerts/:alertId", async (_req, res) => res.status(501).json({ message: "Alerts not enabled yet" }));
 
-  // --- Usage (optional passthrough) ---
+  // Usage (optional passthrough)
   app.get("/api/usage", async (_req, res) => {
     try {
       const usage = await oddsApiService.getApiUsage();
