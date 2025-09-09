@@ -1,233 +1,169 @@
 // server/services/oddsApi.ts
-type Json = Record<string, any>;
+type Json = any;
 
-interface SportsGameOddsEvent {
-  eventID: string;
-  sportID?: string;
-  leagueID: string;
-  type?: string;
-  teams?: {
-    home?: {
-      teamID?: string;
-      names?: { short?: string; medium?: string; long?: string };
-    };
-    away?: {
-      teamID?: string;
-      names?: { short?: string; medium?: string; long?: string };
-    };
-  };
-  commenceTime: string;      // ISO
-  odds?: Record<string, any>; // provider-specific blob
-}
-
-interface SportsGameOddsEventsResponse {
-  success: boolean;
-  data: SportsGameOddsEvent[];
-  nextCursor?: string | null;
-}
-
-interface SportsGameOddsLeague {
-  leagueID: string;     // e.g. "NFL", "NBA"
-  sportID: string;      // e.g. "FOOTBALL", "BASKETBALL"
-  name: string;
-  shortName?: string;
-  enabled: boolean;
-}
-
-interface SportsGameOddsLeaguesResponse {
-  success: boolean;
-  data: SportsGameOddsLeague[];
-}
-
-const BASE_URL = "https://api.sportsgameodds.com/v2";
-
-function assertApiKey(): string {
-  const apiKey = process.env.SPORTSGAMEODDS_API_KEY || "";
-  if (!apiKey) {
-    throw new Error("SPORTSGAMEODDS_API_KEY not configured");
-  }
-  return apiKey;
-}
-
-async function fetchJson(url: string, apiKey: string): Promise<Json> {
+async function fetchJsonWith429Retry(url: string, apiKey: string, attempt = 1): Promise<Json> {
   const res = await fetch(url, { headers: { "x-api-key": apiKey } });
+
+  if (res.status === 429) {
+    // brief, bounded backoff
+    const retryAfterHdr = res.headers.get("retry-after");
+    const retryAfter = retryAfterHdr ? Number(retryAfterHdr) : 2;
+    if (attempt <= 2) {
+      await new Promise(r => setTimeout(r, Math.min(5, Math.max(1, retryAfter)) * 1000));
+      return fetchJsonWith429Retry(url, apiKey, attempt + 1);
+    }
+  }
+
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    const message = `SportsGameOdds API error: ${res.status} ${res.statusText}${
-      text ? ` - ${text.slice(0, 300)}` : ""
-    }`;
-    const err = new Error(message) as Error & { status?: number; body?: string };
+    const err = new Error(
+      `SportsGameOdds API error: ${res.status} ${res.statusText}${text ? ` - ${text.slice(0,300)}` : ""}`
+    ) as any;
     err.status = res.status;
     err.body = text;
     throw err;
   }
-  return (await res.json()) as Json;
-}
-
-function safeTeamName(team?: { teamID?: string; names?: { medium?: string; short?: string; long?: string } }): string {
-  return (
-    team?.names?.medium ||
-    team?.names?.short ||
-    team?.names?.long ||
-    team?.teamID ||
-    "Unknown Team"
-  );
-}
-
-/**
- * Transform SGO "odds" map into our canonical bookmakers array.
- * We’re defensive here since SGO’s structure can vary by market/sport.
- */
-function transformOddsToBookmakers(odds: Record<string, any> | undefined): any[] {
-  if (!odds || typeof odds !== "object") return [];
-
-  // bookmakerKey -> { key, title, last_update, markets: [] }
-  const map = new Map<
-    string,
-    { key: string; title: string; last_update: string; markets: Array<{ key: string; last_update: string; outcomes: Array<{ name: string; price: number | string; point?: number | string | null }> }> }
-  >();
-
-  for (const [, node] of Object.entries(odds)) {
-    const bookmakerKey = (node?.bookmaker?.key as string) || "unknown";
-    const bookmakerTitle = (node?.bookmaker?.title as string) || "Unknown Bookmaker";
-    const lastUpdate = (node?.last_update as string) || new Date().toISOString();
-    const marketKey = (node?.betType as string) || "h2h";
-
-    if (!map.has(bookmakerKey)) {
-      map.set(bookmakerKey, { key: bookmakerKey, title: bookmakerTitle, last_update: lastUpdate, markets: [] });
-    }
-    const book = map.get(bookmakerKey)!;
-
-    const outcomes: Array<{ name: string; price: number | string; point?: number | string | null }> = [];
-
-    // common shapes we’ve seen:
-    // - node.price + node.name (+ node.point)
-    // - node.outcomes: [{ name, price, point }]
-    if (node?.outcomes && Array.isArray(node.outcomes)) {
-      for (const o of node.outcomes) {
-        if (o?.name != null && o?.price != null) {
-          outcomes.push({ name: String(o.name), price: o.price, point: o.point ?? null });
-        }
-      }
-    } else if (node?.price != null && node?.name != null) {
-      outcomes.push({ name: String(node.name), price: node.price, point: node.point ?? null });
-    }
-
-    if (outcomes.length > 0) {
-      book.markets.push({
-        key: marketKey,
-        last_update: lastUpdate,
-        outcomes,
-      });
-    }
-  }
-
-  return Array.from(map.values());
+  return res.json();
 }
 
 export class OddsApiService {
   private apiKey: string;
+  private baseUrl = 'https://api.sportsgameodds.com/v2';
 
   constructor() {
-    this.apiKey = assertApiKey();
+    this.apiKey = process.env.SPORTSGAMEODDS_API_KEY || '';
+    if (!this.apiKey) {
+      console.warn('SPORTSGAMEODDS_API_KEY not found in environment variables');
+    }
   }
 
-  /** List leagues => normalize to your "sports" format */
-  async getSports(): Promise<
-    Array<{ key: string; title: string; group: string; description: string; active: boolean; has_outrights: boolean }>
-  > {
-    const url = `${BASE_URL}/leagues`; // trailing slash ok, but not required
-    const data = (await fetchJson(url, this.apiKey)) as SportsGameOddsLeaguesResponse;
-
-    if (!data?.success || !Array.isArray(data.data)) return [];
-
-    return data.data.map((league) => ({
-      key: league.leagueID,                                     // e.g. "NFL"
-      title: league.shortName || league.name,                   // e.g. "NFL"
-      group: league.sportID,                                    // e.g. "FOOTBALL"
-      description: league.name,                                 // full name
-      active: !!league.enabled,
-      has_outrights: false,
+  async getSports(): Promise<any[]> {
+    if (!this.apiKey) throw new Error('SPORTSGAMEODDS_API_KEY not configured');
+    const url = `${this.baseUrl}/leagues/`;
+    const data = await fetchJsonWith429Retry(url, this.apiKey);
+    // Transform to expected shape
+    return (data?.data ?? []).map((league: any) => ({
+      key: league.leagueID,
+      title: league.shortName || league.name,
+      group: league.sportID,
+      description: league.name,
+      active: league.enabled,
+      has_outrights: false
     }));
   }
 
-  /**
-   * Fetch odds for a league (supports pagination via nextCursor).
-   * @param sport League ID (e.g. "NFL", "NBA")
-   * @param limitPerPage default 50 (SGO typical)
-   * @param maxPages safety cap to avoid runaway pagination
-   */
-  async getOdds(sport: string, limitPerPage = 50, maxPages = 5): Promise<any[]> {
-    if (!sport) throw new Error("Missing sport (leagueID) for getOdds");
+  // NOTE: signature supports limit & maxPages; routes.ts already passes these.
+  async getOdds(sport: string, limit = 25, maxPages = 1): Promise<any[]> {
+    if (!this.apiKey) throw new Error('SPORTSGAMEODDS_API_KEY not configured');
+    if (!sport) throw new Error('sport is required');
 
-    let cursor: string | null | undefined = null;
-    let page = 0;
-    const all: any[] = [];
+    const results: any[] = [];
+    let cursor: string | undefined = undefined;
 
-    do {
-      const url = new URL(`${BASE_URL}/events`);
-      url.searchParams.set("leagueID", sport);
-      url.searchParams.set("oddsAvailable", "true");
-      url.searchParams.set("includeAltLines", "true");
-      url.searchParams.set("limit", String(limitPerPage));
-      if (cursor) url.searchParams.set("cursor", cursor);
+    for (let page = 1; page <= maxPages; page++) {
+      const url = new URL(`${this.baseUrl}/events/`);
+      url.searchParams.set('leagueID', sport);
+      url.searchParams.set('oddsAvailable', 'true');
+      url.searchParams.set('includeAltLines', 'true');
+      url.searchParams.set('limit', String(Math.max(1, Math.min(50, limit))));
+      if (cursor) url.searchParams.set('cursor', cursor);
 
-      const json = (await fetchJson(url.toString(), this.apiKey)) as SportsGameOddsEventsResponse;
+      const data = await fetchJsonWith429Retry(url.toString(), this.apiKey);
 
-      const batch = (json?.data ?? []).map((event) => ({
+      const pageData: any[] = (data?.data ?? []).map((event: any) => ({
         id: event.eventID,
         sport_key: event.leagueID,
         sport_title: (event.leagueID || "").toUpperCase(),
         commence_time: event.commenceTime,
-        home_team: safeTeamName(event.teams?.home),
-        away_team: safeTeamName(event.teams?.away),
-        bookmakers: transformOddsToBookmakers(event.odds),
+        home_team: event?.teams?.home?.names?.medium || event?.teams?.home?.teamID || 'Home Team',
+        away_team: event?.teams?.away?.names?.medium || event?.teams?.away?.teamID || 'Away Team',
+        bookmakers: this.transformOddsToBookmakers(event.odds || {})
       }));
 
-      all.push(...batch);
-      cursor = json?.nextCursor || null;
-      page += 1;
-    } while (cursor && page < maxPages);
+      results.push(...pageData);
 
-    return all;
+      cursor = data?.nextCursor;
+      if (!cursor) break;            // no more pages
+      if (results.length >= limit * maxPages) break; // hard cap safety
+    }
+
+    return results;
   }
 
-  /** Fetch one event by ID */
-  async getEventOdds(_sport: string, eventId: string): Promise<any | null> {
-    if (!eventId) throw new Error("Missing eventId for getEventOdds");
+  async getEventOdds(sport: string, eventId: string): Promise<any | null> {
+    if (!this.apiKey) throw new Error('SPORTSGAMEODDS_API_KEY not configured');
+    const url = new URL(`${this.baseUrl}/events/`);
+    url.searchParams.set('eventID', eventId);
+    url.searchParams.set('includeAltLines', 'true');
 
-    const url = new URL(`${BASE_URL}/events`);
-    url.searchParams.set("eventID", eventId);
-    url.searchParams.set("includeAltLines", "true");
-
-    const json = (await fetchJson(url.toString(), this.apiKey)) as SportsGameOddsEventsResponse;
-    const event = json?.data?.[0];
-    if (!event) return null;
+    const data = await fetchJsonWith429Retry(url.toString(), this.apiKey);
+    const ev = (data?.data ?? [])[0];
+    if (!ev) return null;
 
     return {
-      id: event.eventID,
-      sport_key: event.leagueID,
-      sport_title: (event.leagueID || "").toUpperCase(),
-      commence_time: event.commenceTime,
-      home_team: safeTeamName(event.teams?.home),
-      away_team: safeTeamName(event.teams?.away),
-      bookmakers: transformOddsToBookmakers(event.odds),
+      id: ev.eventID,
+      sport_key: ev.leagueID,
+      sport_title: (ev.leagueID || "").toUpperCase(),
+      commence_time: ev.commenceTime,
+      home_team: ev?.teams?.home?.names?.medium || ev?.teams?.home?.teamID || 'Home Team',
+      away_team: ev?.teams?.away?.names?.medium || ev?.teams?.away?.teamID || 'Away Team',
+      bookmakers: this.transformOddsToBookmakers(ev.odds || {})
     };
   }
 
-  /** Best effort account usage (SGO may not expose everything) */
   async getApiUsage(): Promise<{ requests_used: number; requests_remaining: number }> {
+    if (!this.apiKey) throw new Error('SPORTSGAMEODDS_API_KEY not configured');
+    const url = `${this.baseUrl}/account/usage`;
     try {
-      const url = `${BASE_URL}/account/usage`;
-      const json = await fetchJson(url, this.apiKey);
+      const data = await fetchJsonWith429Retry(url, this.apiKey);
       return {
-        requests_used: Number(json?.requests_used ?? 0),
-        requests_remaining: Number(json?.requests_remaining ?? 1000),
+        requests_used: data?.requests_used ?? 0,
+        requests_remaining: data?.requests_remaining ?? 1000,
       };
     } catch {
-      // Not fatal; return defaults
       return { requests_used: 0, requests_remaining: 1000 };
     }
+  }
+
+  private transformOddsToBookmakers(odds: Record<string, any>): any[] {
+    const bookmakerMap = new Map<string, any>();
+
+    for (const [, oddData] of Object.entries(odds)) {
+      if (!oddData || !oddData.bookmaker) continue;
+
+      const bookmakerKey = oddData.bookmaker.key || 'unknown';
+      const bookmakerTitle = oddData.bookmaker.title || 'Unknown Bookmaker';
+
+      if (!bookmakerMap.has(bookmakerKey)) {
+        bookmakerMap.set(bookmakerKey, {
+          key: bookmakerKey,
+          title: bookmakerTitle,
+          last_update: oddData.last_update || new Date().toISOString(),
+          markets: []
+        });
+      }
+
+      const bookmaker = bookmakerMap.get(bookmakerKey);
+      const outcomes: any[] = [];
+
+      if (oddData.price && oddData.name) {
+        outcomes.push({
+          name: oddData.name,
+          price: oddData.price,
+          point: oddData.point
+        });
+      }
+
+      if (outcomes.length > 0) {
+        bookmaker.markets.push({
+          key: oddData.betType || 'h2h',
+          last_update: oddData.last_update || new Date().toISOString(),
+          outcomes
+        });
+      }
+    }
+
+    return Array.from(bookmakerMap.values());
   }
 }
 
