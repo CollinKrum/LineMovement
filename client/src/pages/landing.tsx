@@ -1,8 +1,29 @@
+import { useState } from "react";
+import { useLocation } from "wouter";
+import { apiRequest } from "@/lib/queryClient";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { BarChart3, TrendingUp, Bell, Zap } from "lucide-react";
 
 export default function Landing() {
+  const [loading, setLoading] = useState(false);
+  const [, setLocation] = useLocation();
+
+  async function handleStart() {
+    setLoading(true);
+    try {
+      // seed a small sample so the dashboard has data to show
+      await apiRequest("POST", "/seed/arbitrage?limit=10");
+    } catch (err) {
+      // non-blocking: still take the user to dashboard even if seed fallback is used
+      console.error("Seeding failed:", err);
+    } finally {
+      setLoading(false);
+      setLocation("/dashboard");
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -18,17 +39,17 @@ export default function Landing() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <Button 
+              <Button
                 variant="ghost"
                 className="text-white hover:bg-white/10 border border-white/20 hover:border-white/40 transition-all duration-300"
-                onClick={() => window.location.href = '/api/login'}
+                onClick={() => (window.location.href = "/api/login")}
                 data-testid="button-signin"
               >
                 Sign In
               </Button>
-              <Button 
+              <Button
                 className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300"
-                onClick={() => window.location.href = '/api/login'}
+                onClick={() => (window.location.href = "/api/login")}
                 data-testid="button-signup"
               >
                 🚀 Get Started
@@ -46,7 +67,7 @@ export default function Landing() {
           <div className="absolute top-1/3 right-1/4 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
           <div className="absolute bottom-1/4 left-1/3 w-72 h-72 bg-cyan-500/10 rounded-full blur-3xl animate-pulse delay-2000"></div>
         </div>
-        
+
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
             <div className="mb-8">
@@ -63,21 +84,25 @@ export default function Landing() {
               </span>
             </h1>
             <p className="text-xl md:text-2xl text-blue-100/90 mb-12 max-w-4xl mx-auto leading-relaxed">
-              🎯 Real-time odds tracking, line movement alerts, and the best odds comparison 
+              🎯 Real-time odds tracking, line movement alerts, and the best odds comparison
               across all major sportsbooks. Never miss a profitable betting opportunity again.
             </p>
             <div className="flex flex-col sm:flex-row gap-6 justify-center">
-              <Button 
-                size="lg" 
-                className="text-xl px-12 py-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-2xl hover:shadow-blue-500/25 transform hover:scale-110 transition-all duration-300 border-2 border-blue-400/50"
-                onClick={() => window.location.href = '/api/login'}
+              <Button
+                size="lg"
+                className="text-xl px-12 py-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-2xl hover:shadow-blue-500/25 transform hover:scale-110 transition-all duration-300 border-2 border-blue-400/50 inline-flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                onClick={handleStart}
+                disabled={loading}
                 data-testid="button-start-tracking"
               >
-                🚀 Start Tracking Lines
+                {loading && (
+                  <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-white/70 border-t-transparent" />
+                )}
+                {loading ? "Seeding…" : "🚀 Start Tracking Lines"}
               </Button>
-              <Button 
-                variant="outline" 
-                size="lg" 
+              <Button
+                variant="outline"
+                size="lg"
                 className="text-xl px-12 py-6 bg-white/10 hover:bg-white/20 text-white border-2 border-white/30 hover:border-white/50 backdrop-blur-sm shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300"
                 data-testid="button-view-demo"
               >
@@ -240,10 +265,10 @@ export default function Landing() {
             <p className="text-xl md:text-2xl text-white/90 mb-12 max-w-4xl mx-auto leading-relaxed">
               Join thousands of bettors who use LineTracker Pro to find the best odds and track line movements. Start winning more today!
             </p>
-            <Button 
-              size="lg" 
+            <Button
+              size="lg"
               className="text-2xl px-16 py-8 bg-white hover:bg-gray-100 text-blue-600 shadow-2xl hover:shadow-white/25 transform hover:scale-110 transition-all duration-300 border-4 border-white/50 hover:border-white font-black"
-              onClick={() => window.location.href = '/api/login'}
+              onClick={() => (window.location.href = "/api/login")}
               data-testid="button-get-started-cta"
             >
               🎉 Get Started - It's Free!
@@ -263,7 +288,7 @@ export default function Landing() {
                 Real-time sports betting odds and line movement tracking across all major sportsbooks.
               </p>
             </div>
-            
+
             <div>
               <h4 className="text-sm font-semibold mb-3">Features</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
@@ -273,7 +298,7 @@ export default function Landing() {
                 <li><a href="#" className="hover:text-foreground transition-colors">Best Odds</a></li>
               </ul>
             </div>
-            
+
             <div>
               <h4 className="text-sm font-semibold mb-3">Sports</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
@@ -283,7 +308,7 @@ export default function Landing() {
                 <li><a href="#" className="hover:text-foreground transition-colors">NHL</a></li>
               </ul>
             </div>
-            
+
             <div>
               <h4 className="text-sm font-semibold mb-3">Support</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
@@ -294,7 +319,7 @@ export default function Landing() {
               </ul>
             </div>
           </div>
-          
+
           <div className="border-t border-border mt-8 pt-8 flex flex-col sm:flex-row justify-between items-center">
             <p className="text-sm text-muted-foreground">© 2025 LineTracker Pro. All rights reserved.</p>
             <div className="flex items-center space-x-4 mt-4 sm:mt-0">
@@ -310,3 +335,4 @@ export default function Landing() {
     </div>
   );
 }
+```0
