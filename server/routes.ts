@@ -410,3 +410,140 @@ export function registerRoutes(app: Express): Express {
           id: g.id,
           sportId: g.sportId,
           homeTeam: g.homeTeam,
+          awayTeam: g.awayTeam,
+          commenceTime: g.commenceTime,
+          market,
+          bestHome: best.home ?? null,
+          bestAway: best.away ?? null,
+          bestOver: best.over ?? null,
+          bestUnder: best.under ?? null,
+        });
+      }
+
+      res.json({ count: rows.length, games: rows });
+    } catch (err) {
+      console.error("Error in /api/games/with-best:", err);
+      res.status(500).json({ message: "Failed to build games + best odds feed" });
+    }
+  }); 
+  
+  // =========================
+  // Placeholders for auth features (disabled)
+  // =========================
+  app.get("/api/favorites", async (_req, res) => res.status(501).json({ message: "Favorites not enabled yet" }));
+  app.post("/api/favorites/toggle", async (_req, res) => res.status(501).json({ message: "Favorites not enabled yet" }));
+  app.get("/api/alerts", async (_req, res) => res.status(501).json({ message: "Alerts not enabled yet" }));
+  app.post("/api/alerts", async (_req, res) => res.status(501).json({ message: "Alerts not enabled yet" }));
+  app.delete("/api/alerts/:alertId", async (_req, res) => res.status(501).json({ message: "Alerts not enabled yet" }));
+
+  // Usage (SportsDataIO)
+  app.get("/api/usage", async (_req, res) => {
+    try {
+      const usage = await sportsDataIoService.getApiUsage();
+      res.json(usage);
+    } catch (error) {
+      console.error("Error fetching API usage:", error);
+      res.status(500).json({ message: "Failed to fetch API usage" });
+    }
+  });
+
+  // =========================
+  // Seed functionality for SportsDataIO
+  // =========================
+  app.post("/seed/sportsdata", async (req, res) => {
+    try {
+      const limit = Math.max(1, parseInt(String(req.query.limit ?? "10"), 10));
+      const sport = (req.query.sport as string) || "NFL";
+
+      const games = await sportsDataIoService.getGames(sport);
+      const oddsData = await sportsDataIoService.getOdds(sport, limit);
+
+      let gamesUpserted = 0;
+      let oddsUpserted = 0;
+      let booksUpserted = 0;
+
+      // First sync sports
+      const sports = await sportsDataIoService.getSports();
+      for (const sportData of sports) {
+        await storage.upsertSport({
+          id: sportData.key,
+          title: sportData.title,
+          description: sportData.description,
+          active: sportData.active,
+          hasOutrights: sportData.has_outrights,
+        });
+      }
+
+      // Then sync games and odds
+      for (const event of oddsData.slice(0, limit)) {
+        const commenceTime = event.commence_time ? new Date(event.commence_time) : new Date();
+        if (isNaN(commenceTime.getTime())) continue;
+
+        await storage.upsertGame({
+          id: event.id,
+          sportId: event.sport_key,
+          homeTeam: event.home_team,
+          awayTeam: event.away_team,
+          commenceTime,
+          completed: event.completed || false,
+          homeScore: event.home_score,
+          awayScore: event.away_score,
+        });
+        gamesUpserted++;
+
+        for (const bookmaker of event.bookmakers || []) {
+          const lastUpdate = bookmaker.last_update ? new Date(bookmaker.last_update) : new Date();
+          if (isNaN(lastUpdate.getTime())) continue;
+
+          await storage.upsertBookmaker({
+            id: bookmaker.key,
+            title: bookmaker.title,
+            lastUpdate,
+          });
+          booksUpserted++;
+
+          for (const market of bookmaker.markets || []) {
+            for (const outcome of market.outcomes || []) {
+              let outcomeType = "";
+              if (market.key === "h2h" || market.key === "spreads") {
+                outcomeType = outcome.name === event.home_team ? "home" : "away";
+              } else if (market.key === "totals") {
+                outcomeType = outcome.name?.toLowerCase() === "over" ? "over" : "under";
+              }
+              if (!outcomeType) continue;
+
+              await storage.upsertOdds({
+                gameId: event.id,
+                bookmakerId: bookmaker.key,
+                market: market.key,
+                outcomeType,
+                price: String(outcome.price),
+                point: outcome.point != null ? String(outcome.point) : null,
+              });
+              oddsUpserted++;
+            }
+          }
+        }
+      }
+
+      return res.json({
+        ok: true,
+        sport,
+        seededFrom: "SportsDataIO",
+        count: limit,
+        gamesUpserted,
+        booksUpserted,
+        oddsUpserted,
+      });
+    } catch (err: any) {
+      console.error("Seed from SportsDataIO failed:", err);
+      return res.status(500).json({ 
+        ok: false, 
+        message: "Seed from SportsDataIO failed", 
+        error: String(err?.message || err) 
+      });
+    }
+  });
+
+  return app;
+}
