@@ -13,10 +13,10 @@ export default function Landing() {
   async function handleStart() {
     setLoading(true);
     try {
-      // seed a small sample so the dashboard has data to show
-      await apiRequest("POST", "/seed/arbitrage?limit=10");
+      // Seed with SportsDataIO data instead of arbitrage
+      await apiRequest("POST", "/seed/sportsdata?limit=10&sport=NFL");
     } catch (err) {
-      // non-blocking: still take the user to dashboard even if seed fallback is used
+      // non-blocking: still take the user to dashboard even if seed fails
       console.error("Seeding failed:", err);
     } finally {
       setLoading(false);
@@ -72,7 +72,7 @@ export default function Landing() {
           <div className="text-center">
             <div className="mb-8">
               <span className="inline-block bg-gradient-to-r from-blue-500 to-purple-500 text-white px-6 py-2 rounded-full text-sm font-semibold shadow-lg animate-bounce">
-                🔥 Live Sports Betting Intelligence
+                🔥 Powered by SportsDataIO API
               </span>
             </div>
             <h1 className="text-5xl md:text-7xl font-black mb-8">
@@ -84,8 +84,8 @@ export default function Landing() {
               </span>
             </h1>
             <p className="text-xl md:text-2xl text-blue-100/90 mb-12 max-w-4xl mx-auto leading-relaxed">
-              🎯 Real-time odds tracking, line movement alerts, and the best odds comparison
-              across all major sportsbooks. Never miss a profitable betting opportunity again.
+              🎯 Real-time odds tracking, line movement alerts, and comprehensive sports data
+              across NFL, NBA, MLB, NHL and more. Professional-grade sports analytics platform.
             </p>
             <div className="flex flex-col sm:flex-row gap-6 justify-center">
               <Button
@@ -98,7 +98,7 @@ export default function Landing() {
                 {loading && (
                   <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-white/70 border-t-transparent" />
                 )}
-                {loading ? "Seeding…" : "🚀 Start Tracking Lines"}
+                {loading ? "Loading NFL Data..." : "🚀 Start Tracking Lines"}
               </Button>
               <Button
                 variant="outline"
@@ -119,18 +119,18 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
           <div className="text-center mb-20">
             <div className="inline-block bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-full text-sm font-semibold shadow-lg mb-6">
-              ✨ Premium Features
+              ✨ SportsDataIO Powered Features
             </div>
             <h2 className="text-4xl md:text-6xl font-black mb-6">
               <span className="bg-gradient-to-r from-slate-900 to-blue-600 dark:from-white dark:to-blue-400 bg-clip-text text-transparent">
-                Everything You Need to
+                Professional Sports Data
               </span>
               <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent block">
-                Dominate Lines 🎯
+                At Your Fingertips 🎯
               </span>
             </h2>
             <p className="text-xl md:text-2xl text-slate-600 dark:text-slate-300">
-              Professional-grade tools for serious sports bettors
+              Comprehensive sports analytics for serious professionals
             </p>
           </div>
 
@@ -142,10 +142,10 @@ export default function Landing() {
                   <BarChart3 className="w-8 h-8 text-white" />
                 </div>
                 <h3 className="text-xl font-bold mb-3 bg-gradient-to-r from-slate-900 to-blue-600 dark:from-white dark:to-blue-400 bg-clip-text text-transparent">
-                  📊 Real-Time Odds
+                  📊 Live Game Data
                 </h3>
                 <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
-                  Live odds from 8+ major sportsbooks updated every 30 seconds
+                  Real-time scores, odds, and game information across all major sports leagues
                 </p>
               </CardContent>
             </Card>
@@ -157,10 +157,10 @@ export default function Landing() {
                   <TrendingUp className="w-8 h-8 text-white" />
                 </div>
                 <h3 className="text-xl font-bold mb-3 bg-gradient-to-r from-slate-900 to-orange-600 dark:from-white dark:to-orange-400 bg-clip-text text-transparent">
-                  🔥 Line Movement
+                  📈 Player Statistics
                 </h3>
                 <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
-                  Track and visualize how betting lines move throughout the day
+                  Comprehensive player stats, performance metrics, and historical data
                 </p>
               </CardContent>
             </Card>
@@ -172,10 +172,10 @@ export default function Landing() {
                   <Bell className="w-8 h-8 text-white" />
                 </div>
                 <h3 className="text-xl font-bold mb-3 bg-gradient-to-r from-slate-900 to-green-600 dark:from-white dark:to-green-400 bg-clip-text text-transparent">
-                  🔔 Smart Alerts
+                  🏆 Team Standings
                 </h3>
                 <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
-                  Get notified instantly when lines move beyond your thresholds
+                  Up-to-date team rankings, standings, and league position tracking
                 </p>
               </CardContent>
             </Card>
@@ -187,10 +187,10 @@ export default function Landing() {
                   <Zap className="w-8 h-8 text-white" />
                 </div>
                 <h3 className="text-xl font-bold mb-3 bg-gradient-to-r from-slate-900 to-purple-600 dark:from-white dark:to-purple-400 bg-clip-text text-transparent">
-                  ⚡ Best Odds
+                  ⚡ Betting Odds
                 </h3>
                 <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
-                  Automatically find the best odds across all sportsbooks
+                  Professional-grade betting odds and line movement tracking
                 </p>
               </CardContent>
             </Card>
@@ -214,7 +214,7 @@ export default function Landing() {
                 <div className="absolute -inset-4 bg-blue-500/20 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               </div>
               <div className="text-xl md:text-2xl text-blue-100 font-semibold">
-                📊 Sportsbooks Tracked
+                📊 Major Sports Leagues
               </div>
             </div>
             <div className="group">
@@ -225,18 +225,18 @@ export default function Landing() {
                 <div className="absolute -inset-4 bg-purple-500/20 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               </div>
               <div className="text-xl md:text-2xl text-purple-100 font-semibold">
-                🔴 Live Monitoring
+                🔴 Real-Time Updates
               </div>
             </div>
             <div className="group">
               <div className="relative inline-block mb-4">
                 <div className="text-6xl md:text-7xl font-black bg-gradient-to-r from-cyan-400 to-green-400 bg-clip-text text-transparent animate-pulse group-hover:scale-110 transition-transform duration-300">
-                  5
+                  Pro
                 </div>
                 <div className="absolute -inset-4 bg-cyan-500/20 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               </div>
               <div className="text-xl md:text-2xl text-cyan-100 font-semibold">
-                🏆 Major Sports
+                🏆 Grade Data Quality
               </div>
             </div>
           </div>
@@ -253,17 +253,17 @@ export default function Landing() {
           <div className="bg-white/10 backdrop-blur-sm rounded-3xl border border-white/20 p-12 shadow-2xl">
             <div className="mb-8">
               <span className="inline-block bg-white/20 text-white px-6 py-2 rounded-full text-sm font-semibold shadow-lg animate-bounce">
-                🚀 Join the Winners
+                🚀 Powered by SportsDataIO
               </span>
             </div>
             <h2 className="text-4xl md:text-6xl font-black text-white mb-6">
-              Ready to Start
+              Ready to Access
               <span className="block bg-gradient-to-r from-yellow-300 to-orange-300 bg-clip-text text-transparent">
-                Tracking Lines? 🎯
+                Professional Sports Data? 🎯
               </span>
             </h2>
             <p className="text-xl md:text-2xl text-white/90 mb-12 max-w-4xl mx-auto leading-relaxed">
-              Join thousands of bettors who use LineTracker Pro to find the best odds and track line movements. Start winning more today!
+              Join professionals who rely on accurate, real-time sports data. Get access to comprehensive stats, odds, and analytics across all major leagues!
             </p>
             <Button
               size="lg"
@@ -285,17 +285,17 @@ export default function Landing() {
             <div>
               <h3 className="text-lg font-semibold mb-4">LineTracker Pro</h3>
               <p className="text-sm text-muted-foreground">
-                Real-time sports betting odds and line movement tracking across all major sportsbooks.
+                Professional sports data platform powered by SportsDataIO API for accurate, real-time information.
               </p>
             </div>
 
             <div>
               <h4 className="text-sm font-semibold mb-3">Features</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#" className="hover:text-foreground transition-colors">Live Odds</a></li>
-                <li><a href="#" className="hover:text-foreground transition-colors">Line Movement</a></li>
-                <li><a href="#" className="hover:text-foreground transition-colors">Alerts</a></li>
-                <li><a href="#" className="hover:text-foreground transition-colors">Best Odds</a></li>
+                <li><a href="#" className="hover:text-foreground transition-colors">Live Game Data</a></li>
+                <li><a href="#" className="hover:text-foreground transition-colors">Player Statistics</a></li>
+                <li><a href="#" className="hover:text-foreground transition-colors">Team Standings</a></li>
+                <li><a href="#" className="hover:text-foreground transition-colors">Betting Odds</a></li>
               </ul>
             </div>
 
@@ -323,7 +323,7 @@ export default function Landing() {
           <div className="border-t border-border mt-8 pt-8 flex flex-col sm:flex-row justify-between items-center">
             <p className="text-sm text-muted-foreground">© 2025 LineTracker Pro. All rights reserved.</p>
             <div className="flex items-center space-x-4 mt-4 sm:mt-0">
-              <span className="text-xs text-muted-foreground">Powered by The Odds API</span>
+              <span className="text-xs text-muted-foreground">Powered by SportsDataIO</span>
               <div className="flex items-center space-x-2">
                 <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                 <span className="text-xs text-green-600">Live Data</span>
