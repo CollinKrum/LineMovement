@@ -57,12 +57,18 @@ export default function Dashboard() {
         <div className="text-center py-8">
           <h1 className="text-4xl md:text-5xl font-black mb-4">
             <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-cyan-600 bg-clip-text text-transparent">
-              🎯 Sports Betting Dashboard
+              🎯 Sports Data Dashboard
             </span>
           </h1>
           <p className="text-xl text-slate-600 dark:text-slate-300 font-medium">
-            Real-time line tracking and betting intelligence at your fingertips
+            Professional sports analytics powered by SportsDataIO at your fingertips
           </p>
+          <div className="mt-4 inline-flex items-center gap-2 bg-green-100 dark:bg-green-900/20 px-4 py-2 rounded-full">
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+            <span className="text-sm font-medium text-green-700 dark:text-green-400">
+              Live Data from SportsDataIO
+            </span>
+          </div>
         </div>
         
         <SportsFilter />
