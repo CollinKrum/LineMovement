@@ -4,7 +4,7 @@ import { registerRoutes } from "./routes.js";
 
 const app = express();
 
-/** CORS (keep * while testing; later set to https://app.LINETRACKER.NET) */
+/** CORS (keep * while testing; later set to your production domain) */
 const allowed = (process.env.CORS_ORIGIN || "*")
   .split(",")
   .map(s => s.trim())
@@ -23,7 +23,7 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-/** Simple API request logging (no res.json override) */
+/** Simple API request logging */
 app.use((req: Request, res: Response, next: NextFunction) => {
   const start = Date.now();
   res.on("finish", () => {
@@ -37,10 +37,10 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
 /** Health check */
 app.get("/health", (_req: Request, res: Response) => {
-  res.json({ ok: true });
+  res.json({ ok: true, provider: "SportsDataIO" });
 });
 
-/** Register all API routes (mutates the app, returns the same app) */
+/** Register all API routes */
 registerRoutes(app);
 
 /** Centralized error handler */
@@ -51,10 +51,12 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   console.error(err);
 });
 
-/** Start server (Render provides PORT) */
+/** Start server */
 const port = parseInt(process.env.PORT || "8080", 10);
 app.listen(port, "0.0.0.0", () => {
-  console.log(`API listening on :${port}`);
+  console.log(`🚀 LineTracker API listening on :${port}`);
+  console.log(`📊 Powered by SportsDataIO`);
+  console.log(`🔑 API Key: ${process.env.SPORTSDATAIO_API_KEY ? 'Set' : 'Missing'}`);
 });
 
 // Simple browser UI at "/"
@@ -63,81 +65,122 @@ app.get("/", (_req, res) => {
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>LineMovement – Best Odds</title>
+  <title>LineTracker – Sports Data Platform</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 20px; }
-    h1 { margin: 0 0 12px; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 20px; background: #0b0f17; color: #e6e9ee; }
+    h1 { margin: 0 0 12px; background: linear-gradient(45deg, #3b82f6, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     .controls { margin: 8px 0 16px; display: flex; gap: 8px; align-items: center; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #ddd; padding: 8px; }
-    th { background: #f7f7f7; text-align: left; }
-    code { background:#f4f4f4; padding:2px 4px; border-radius:4px; }
-    .muted { color: #777; }
+    table { border-collapse: collapse; width: 100%; background: #1e293b; border-radius: 8px; overflow: hidden; }
+    th, td { border-bottom: 1px solid #334155; padding: 12px; }
+    th { background: #0f172a; text-align: left; font-weight: 600; }
+    tbody tr:hover td { background: rgba(59, 130, 246, 0.1); }
+    .badge { background: #22c55e; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+    .muted { color: #94a3b8; }
+    select, button { background: #334155; color: #e2e8f0; border: 1px solid #475569; border-radius: 6px; padding: 8px 12px; }
+    button { cursor: pointer; transition: all 0.2s; }
+    button:hover { background: #475569; border-color: #64748b; }
   </style>
 </head>
 <body>
-  <h1>Best Odds (server feed)</h1>
+  <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px;">
+    <h1>🏆 LineTracker API</h1>
+    <span class="badge">SportsDataIO</span>
+  </div>
+  
   <div class="controls">
-    <label>Market:
-      <select id="market">
-        <option value="point_spread" selected>point_spread</option>
-        <option value="h2h">h2h</option>
-        <option value="totals">totals</option>
+    <label>Sport:
+      <select id="sport">
+        <option value="NFL" selected>NFL</option>
+        <option value="NBA">NBA</option>
+        <option value="MLB">MLB</option>
+        <option value="NHL">NHL</option>
+        <option value="NCAAF">NCAAF</option>
+        <option value="NCAAB">NCAAB</option>
       </select>
     </label>
     <label>Limit:
-      <input id="limit" type="number" min="1" max="100" value="10" />
+      <input id="limit" type="number" min="1" max="50" value="10" />
     </label>
-    <button id="refresh">Refresh</button>
+    <button id="sync">Sync Data</button>
+    <button id="refresh">View Games</button>
     <span id="status" class="muted"></span>
   </div>
+  
   <table id="tbl">
     <thead>
       <tr>
-        <th>Start (UTC)</th>
-        <th>Sport</th>
-        <th>Away</th>
-        <th>Home</th>
-        <th>Best Home</th>
-        <th>Best Away</th>
+        <th>Game</th>
+        <th>Start Time</th>
+        <th>Status</th>
+        <th>Score</th>
+        <th>Bookmakers</th>
       </tr>
     </thead>
     <tbody></tbody>
   </table>
 
   <script>
-    async function load() {
-      const market = document.getElementById('market').value;
+    async function syncData() {
+      const sport = document.getElementById('sport').value;
       const limit = document.getElementById('limit').value || 10;
       const status = document.getElementById('status');
-      status.textContent = 'Loading...';
+      status.textContent = 'Syncing...';
+      
       try {
-        const res = await fetch('/api/games/with-best?market=' + encodeURIComponent(market) + '&limit=' + encodeURIComponent(limit));
+        const res = await fetch('/api/odds/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sport })
+        });
         const data = await res.json();
+        status.textContent = \`Synced: \${data.gamesUpdated || 0} games, \${data.oddsUpdated || 0} odds\`;
+        loadGames();
+      } catch (e) {
+        status.textContent = 'Sync error: ' + (e.message || e);
+      }
+    }
+    
+    async function loadGames() {
+      const sport = document.getElementById('sport').value;
+      const status = document.getElementById('status');
+      status.textContent = 'Loading games...';
+      
+      try {
+        const res = await fetch('/api/games?sport=' + encodeURIComponent(sport));
+        const games = await res.json();
         const tbody = document.querySelector('#tbl tbody');
         tbody.innerHTML = '';
-        (data.games || []).forEach(g => {
+        
+        games.forEach(g => {
           const tr = document.createElement('tr');
-          const bestHome = g.bestHome ? \`\${g.bestHome.price} @ \${g.bestHome.bookmakerTitle}\` : '-';
-          const bestAway = g.bestAway ? \`\${g.bestAway.price} @ \${g.bestAway.bookmakerTitle}\` : '-';
+          const score = g.homeScore !== null && g.awayScore !== null 
+            ? \`\${g.awayScore}-\${g.homeScore}\` 
+            : '-';
+          const startTime = new Date(g.commenceTime).toLocaleDateString();
+          const status = g.completed ? 'Final' : 'Scheduled';
+          
           tr.innerHTML = \`
-            <td>\${g.commenceTime}</td>
-            <td>\${g.sportId}</td>
-            <td>\${g.awayTeam}</td>
-            <td>\${g.homeTeam}</td>
-            <td>\${bestHome}</td>
-            <td>\${bestAway}</td>
+            <td><strong>\${g.awayTeam}</strong> @ <strong>\${g.homeTeam}</strong></td>
+            <td>\${startTime}</td>
+            <td>\${status}</td>
+            <td>\${score}</td>
+            <td>0 books</td>
           \`;
           tbody.appendChild(tr);
         });
-        status.textContent = \`Loaded \${data.count || 0} games\`;
+        
+        status.textContent = \`Loaded \${games.length} games\`;
       } catch (e) {
-        status.textContent = 'Error: ' + (e && e.message ? e.message : e);
+        status.textContent = 'Load error: ' + (e.message || e);
       }
     }
-    document.getElementById('refresh').addEventListener('click', load);
-    load();
+    
+    document.getElementById('sync').addEventListener('click', syncData);
+    document.getElementById('refresh').addEventListener('click', loadGames);
+    
+    // Auto-load on page load
+    loadGames();
   </script>
 </body>
 </html>`);
