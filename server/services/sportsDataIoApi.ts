@@ -244,29 +244,29 @@ export class SportsDataIoService {
           }
           const bm = bookMap.get(key);
 
-          // Moneyline
-          if (odd.HomeMoneyLine || odd.AwayMoneyLine) {
-            const outcomes: any[] = [];
-            if (odd.HomeMoneyLine) {
-              outcomes.push({
-                name: game.HomeTeam || "Home",
-                price: this.convertAmericanToDecimal(odd.HomeMoneyLine),
-              });
-            }
-            if (odd.AwayMoneyLine) {
-              outcomes.push({
-                name: game.AwayTeam || "Away",
-                price: this.convertAmericanToDecimal(odd.AwayMoneyLine),
-              });
-            }
-            if (outcomes.length) {
-              bm.markets.push({
-                key: "h2h",
-                last_update: odd.Created || new Date().toISOString(),
-                outcomes,
-              });
-            }
-          }
+          // Money Line (H2H)
+if (odd.HomeMoneyLine || odd.AwayMoneyLine) {
+  const outcomes = [];
+  if (odd.HomeMoneyLine) {
+    outcomes.push({
+      name: game.HomeTeam || game.HomeTeamName || 'HOME_TEAM', // <-- team, not "Home"
+      price: this.convertAmericanToDecimal(odd.HomeMoneyLine)
+    });
+  }
+  if (odd.AwayMoneyLine) {
+    outcomes.push({
+      name: game.AwayTeam || game.AwayTeamName || 'AWAY_TEAM', // <-- team, not "Away"
+      price: this.convertAmericanToDecimal(odd.AwayMoneyLine)
+    });
+  }
+  if (outcomes.length > 0) {
+    bookmaker.markets.push({
+      key: 'h2h',
+      last_update: odd.Created || new Date().toISOString(),
+      outcomes
+    });
+  }
+}
 
           // Spreads
           if (
