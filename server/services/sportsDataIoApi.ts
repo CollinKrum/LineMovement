@@ -221,11 +221,11 @@ export class SportsDataIoService {
   }
 
   // Safe normalizer for odds payloads
-  // server/services/sportsDataIoApi.ts
-// ...
 private transformOddsData(raw: any[], fallbackSportKey?: string) {
-  return (raw ?? []).map((event: any) => {
-    // Normalize common SportsDataIO fields
+  const arr = Array.isArray(raw) ? raw : [];
+
+  return arr.map((event: any) => {
+    // ----- normalize basic event fields -----
     const commence =
       event.commence_time ??
       event.commenceTime ??
@@ -247,72 +247,113 @@ private transformOddsData(raw: any[], fallbackSportKey?: string) {
       event.AwayTeamName ??
       null;
 
-    // Many SportsDataIO odds payloads don’t include “bookmakers/markets/outcomes”
-    // in the TheOddsAPI shape. If it’s not present, leave an empty array.
-    const bookmakers = Array.isArray(event.bookmakers ?? event.Bookmakers ?? event.PregameOdds)
-      ? (event.bookmakers ?? event.Bookmakers ?? []).map((bm: any) => ({
-          key: bm.key ?? bm.Key ?? bm.Sportsbook ?? "unknown",
-          title: bm.title ?? bm.Title ?? bm.Sportsbook ?? "Unknown",
+    const id =
+      event.id ??
+      event.GameID?.toString?.() ??
+      event.GameId?.toString?.() ??
+      event.GameKey ??
+      `${(fallbackSportKey || "NFL")}_${Date.now()}_${Math.random()}`;
+
+    const sportKey =
+      event.sport_key ??
+      event.sportKey ??
+      event.sport ??
+      fallbackSportKey ??
+      "NFL";
+
+    const sportTitle =
+      event.sport_title ??
+      event.sportTitle ??
+      (fallbackSportKey ?? "NFL");
+
+    // ----- keep any TheOddsAPI-style bookmakers as-is (prices left untouched) -----
+    const fromOddsApi = Array.isArray(event.bookmakers ?? event.Bookmakers)
+      ? (event.bookmakers ?? event.Bookmakers).map((bm: any) => ({
+          key: bm.key ?? bm.Key ?? "unknown",
+          title: bm.title ?? bm.Title ?? bm.key ?? "Unknown",
           last_update: bm.last_update ?? bm.LastUpdate ?? null,
           markets: (bm.markets ?? bm.Markets ?? []).map((m: any) => ({
             key: m.key ?? m.Key ?? "h2h",
             last_update: m.last_update ?? m.LastUpdate ?? bm.last_update ?? null,
             outcomes: (m.outcomes ?? m.Outcomes ?? []).map((o: any) => ({
               name: o.name ?? o.Name ?? null,
-              price: Number(o.price ?? o.Price),
+              // do NOT convert; store raw as string
+              price: String(o.price ?? o.Price ?? ""),
               point: o.point ?? o.Point ?? null,
             })),
           })),
         }))
       : [];
 
+    // ----- synthesize bookmakers from SportsDataIO PregameOdds (American odds kept) -----
+    const pregame = Array.isArray(event.PregameOdds) ? event.PregameOdds : [];
+    const fromSdio = pregame.map((po: any) => {
+      const sportsbook = po.Sportsbook ?? po.SportsBook ?? po.Source ?? "SportsDataIO";
+      const updated = po.Updated ?? po.LastUpdated ?? null;
+
+      // Moneyline (h2h)
+      const homeMl = po.HomeMoneyLine ?? po.HomeLine ?? po.MoneyLineHome ?? null;
+      const awayMl = po.AwayMoneyLine ?? po.AwayLine ?? po.MoneyLineAway ?? null;
+
+      const h2hOutcomes: any[] = [];
+      if (homeMl !== null && homeMl !== undefined) {
+        h2hOutcomes.push({ name: "home", price: String(homeMl), point: null });
+      }
+      if (awayMl !== null && awayMl !== undefined) {
+        h2hOutcomes.push({ name: "away", price: String(awayMl), point: null });
+      }
+
+      // Totals (Over/Under)
+      const totalPoint =
+        po.OverUnder ?? po.TotalNumber ?? po.Total ?? po.PointTotal ?? null;
+
+      const overAmerican =
+        po.OverPayout ?? po.OverOdds ?? po.OverPrice ?? po.OverMoneyLine ?? null;
+      const underAmerican =
+        po.UnderPayout ?? po.UnderOdds ?? po.UnderPrice ?? po.UnderMoneyLine ?? null;
+
+      const totalsOutcomes: any[] = [];
+      if (totalPoint != null && overAmerican != null) {
+        totalsOutcomes.push({ name: "over", price: String(overAmerican), point: String(totalPoint) });
+      }
+      if (totalPoint != null && underAmerican != null) {
+        totalsOutcomes.push({ name: "under", price: String(underAmerican), point: String(totalPoint) });
+      }
+
+      const markets: any[] = [];
+      if (h2hOutcomes.length) {
+        markets.push({ key: "h2h", last_update: updated, outcomes: h2hOutcomes });
+      }
+      if (totalsOutcomes.length) {
+        markets.push({ key: "totals", last_update: updated, outcomes: totalsOutcomes });
+      }
+
+      return {
+        key: sportsbook,
+        title: sportsbook,
+        last_update: updated,
+        markets,
+      };
+    });
+
+    const bookmakers = [...fromOddsApi, ...fromSdio].filter(b => (b.markets ?? []).length);
+
     return {
-      id:
-        event.id ??
-        event.GameID?.toString?.() ??
-        event.GameId?.toString?.() ??
-        event.GameKey ??
-        `${(fallbackSportKey || "NFL")}_${Date.now()}_${Math.random()}`,
-
-      sport_key:
-        event.sport_key ??
-        event.sportKey ??
-        event.sport ??
-        fallbackSportKey ??
-        "NFL",
-
-      sport_title:
-        event.sport_title ??
-        event.sportTitle ??
-        (fallbackSportKey ?? "NFL"),
-
+      id,
+      sport_key: sportKey,
+      sport_title: sportTitle,
       commence_time: commence,
       home_team: homeTeam,
       away_team: awayTeam,
-
       completed: Boolean(
         event.completed ||
-          event.IsClosed === true ||
-          event.Status === "Final"
+        event.IsClosed === true ||
+        event.Status === "Final"
       ),
       home_score: event.home_score ?? event.HomeScore ?? null,
       away_score: event.away_score ?? event.AwayScore ?? null,
       status: event.status ?? event.Status ?? "Scheduled",
-
       bookmakers,
     };
   });
 }
-
-  private convertAmericanToDecimal(americanOdds: number): number {
-    return americanOdds > 0
-      ? americanOdds / 100 + 1
-      : 100 / Math.abs(americanOdds) + 1;
-  }
-
-  async getApiUsage(): Promise<{ requests_used: number; requests_remaining: number }> {
-    return { requests_used: 0, requests_remaining: 1000 };
-  }
-}
-
-export const sportsDataIoService = new SportsDataIoService();
