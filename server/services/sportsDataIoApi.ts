@@ -221,11 +221,11 @@ export class SportsDataIoService {
   }
 
   // Safe normalizer for odds payloads
-private transformOddsData(raw: any[], fallbackSportKey?: string) {
+private transformOddsData(raw: any[], fallbackSportKey?: string): any[] {
   const arr = Array.isArray(raw) ? raw : [];
 
   return arr.map((event: any) => {
-    // ----- normalize basic event fields -----
+    // -------- basic event fields --------
     const commence =
       event.commence_time ??
       event.commenceTime ??
@@ -249,49 +249,47 @@ private transformOddsData(raw: any[], fallbackSportKey?: string) {
 
     const id =
       event.id ??
-      event.GameID?.toString?.() ??
-      event.GameId?.toString?.() ??
+      (event.GameID != null ? String(event.GameID) : undefined) ??
+      (event.GameId != null ? String(event.GameId) : undefined) ??
       event.GameKey ??
-      `${(fallbackSportKey || "NFL")}_${Date.now()}_${Math.random()}`;
+      `${fallbackSportKey ?? "NFL"}_${Date.now()}_${Math.random()}`;
 
     const sportKey =
       event.sport_key ??
       event.sportKey ??
       event.sport ??
-      fallbackSportKey ??
-      "NFL";
+      (fallbackSportKey ?? "NFL");
 
     const sportTitle =
       event.sport_title ??
       event.sportTitle ??
       (fallbackSportKey ?? "NFL");
 
-    // ----- keep any TheOddsAPI-style bookmakers as-is (prices left untouched) -----
+    // -------- “TheOddsAPI-style” bookmakers (pass through, keep American prices as strings) --------
     const fromOddsApi = Array.isArray(event.bookmakers ?? event.Bookmakers)
       ? (event.bookmakers ?? event.Bookmakers).map((bm: any) => ({
           key: bm.key ?? bm.Key ?? "unknown",
-          title: bm.title ?? bm.Title ?? bm.key ?? "Unknown",
+          title: bm.title ?? bm.Title ?? (bm.key ?? "Unknown"),
           last_update: bm.last_update ?? bm.LastUpdate ?? null,
           markets: (bm.markets ?? bm.Markets ?? []).map((m: any) => ({
             key: m.key ?? m.Key ?? "h2h",
-            last_update: m.last_update ?? m.LastUpdate ?? bm.last_update ?? null,
+            last_update: m.last_update ?? m.LastUpdate ?? (bm.last_update ?? null),
             outcomes: (m.outcomes ?? m.Outcomes ?? []).map((o: any) => ({
               name: o.name ?? o.Name ?? null,
-              // do NOT convert; store raw as string
-              price: String(o.price ?? o.Price ?? ""),
+              price: String(o.price ?? o.Price ?? ""), // keep American odds as string
               point: o.point ?? o.Point ?? null,
             })),
           })),
         }))
       : [];
 
-    // ----- synthesize bookmakers from SportsDataIO PregameOdds (American odds kept) -----
+    // -------- SportsDataIO PregameOdds -> synthesize bookmakers (keep American odds) --------
     const pregame = Array.isArray(event.PregameOdds) ? event.PregameOdds : [];
     const fromSdio = pregame.map((po: any) => {
       const sportsbook = po.Sportsbook ?? po.SportsBook ?? po.Source ?? "SportsDataIO";
       const updated = po.Updated ?? po.LastUpdated ?? null;
 
-      // Moneyline (h2h)
+      // moneyline (h2h)
       const homeMl = po.HomeMoneyLine ?? po.HomeLine ?? po.MoneyLineHome ?? null;
       const awayMl = po.AwayMoneyLine ?? po.AwayLine ?? po.MoneyLineAway ?? null;
 
@@ -303,7 +301,7 @@ private transformOddsData(raw: any[], fallbackSportKey?: string) {
         h2hOutcomes.push({ name: "away", price: String(awayMl), point: null });
       }
 
-      // Totals (Over/Under)
+      // totals (over/under)
       const totalPoint =
         po.OverUnder ?? po.TotalNumber ?? po.Total ?? po.PointTotal ?? null;
 
@@ -336,7 +334,9 @@ private transformOddsData(raw: any[], fallbackSportKey?: string) {
       };
     });
 
-    const bookmakers = [...fromOddsApi, ...fromSdio].filter(b => (b.markets ?? []).length);
+    const bookmakers = [...fromOddsApi, ...fromSdio].filter(
+      (b) => Array.isArray(b.markets) && b.markets.length > 0
+    );
 
     return {
       id,
@@ -346,9 +346,7 @@ private transformOddsData(raw: any[], fallbackSportKey?: string) {
       home_team: homeTeam,
       away_team: awayTeam,
       completed: Boolean(
-        event.completed ||
-        event.IsClosed === true ||
-        event.Status === "Final"
+        event.completed || event.IsClosed === true || event.Status === "Final"
       ),
       home_score: event.home_score ?? event.HomeScore ?? null,
       away_score: event.away_score ?? event.AwayScore ?? null,
