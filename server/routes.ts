@@ -3,6 +3,8 @@ import { storage } from "./storage.js";
 import { sportsDataIoService } from "./services/sportsDataIoApi.js";  // Updated import
 import { db } from "./db.js";
 import { sql } from "drizzle-orm";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { pool, db } from "./db.js";
 
 /** Register API routes on the provided Express app. */
 export function registerRoutes(app: Express): Express {
