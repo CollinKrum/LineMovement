@@ -155,7 +155,6 @@ export function registerRoutes(app: Express): Express {
       if (!sport) return res.status(400).json({ message: "Sport parameter is required" });
 
       const limit = Math.max(1, parseInt(String(req.query.limit ?? "25"), 10));
-
       let gamesUpdated = 0;
       let oddsUpdated = 0;
 
@@ -196,26 +195,15 @@ export function registerRoutes(app: Express): Express {
                 const homeTeam = String(event.home_team || "").toLowerCase();
                 const awayTeam = String(event.away_team || "").toLowerCase();
 
-                const isHome =
-                  n === "home" ||
-                  n.includes("home") ||
-                  n === homeTeam;
-
-                const isAway =
-                  n === "away" ||
-                  n.includes("away") ||
-                  n === awayTeam;
-
-                if (isHome) outcomeType = "home";
-                else if (isAway) outcomeType = "away";
-                else {
-                  // last resort: if name contains team codes/names
-                  if (n && homeTeam && n.includes(homeTeam)) outcomeType = "home";
-                  if (!outcomeType && n && awayTeam && n.includes(awayTeam)) outcomeType = "away";
+                if (n.includes("home") || n === homeTeam) {
+                  outcomeType = "home";
+                } else if (n.includes("away") || n === awayTeam) {
+                  outcomeType = "away";
                 }
               } else if (market.key === "totals") {
                 const n = String(outcome.name || "").toLowerCase();
-                outcomeType = n === "over" ? "over" : n === "under" ? "under" : "";
+                if (n === "over") outcomeType = "over";
+                if (n === "under") outcomeType = "under";
               }
 
               if (!outcomeType) continue;
@@ -244,236 +232,12 @@ export function registerRoutes(app: Express): Express {
       });
     } catch (error: any) {
       console.error("Error syncing odds:", error);
-      res.status(500).json({
-        message: "Failed to sync odds",
-        providerStatus: error?.status ?? error?.response?.status ?? null,
-        provider: "SportsDataIO",
-        providerError:
-          typeof error?.body === "string"
-            ? error.body.slice(0, 500)
-            : (error?.body?.message ?? String(error?.message || error)).slice(0, 500),
-      });
-    }
-  });
-
-  // Odds for a specific game
-  app.get("/api/games/:gameId/odds", async (req, res) => {
-    try {
-      const { gameId } = req.params as { gameId: string };
-      const odds = await storage.getOddsByGame(gameId);
-      res.json(odds);
-    } catch (error) {
-      console.error("Error fetching game odds:", error);
-      res.status(500).json({ message: "Failed to fetch game odds" });
-    }
-  });
-
-  // Best odds per market
-  app.get("/api/games/:gameId/best-odds", async (req, res) => {
-    try {
-      const { gameId } = req.params as { gameId: string };
-      const market = req.query.market as string | undefined;
-      if (!market) return res.status(400).json({ message: "Market parameter is required" });
-
-      const bestOdds = await storage.getBestOdds(gameId, market);
-      res.json(bestOdds);
-    } catch (error) {
-      console.error("Error fetching best odds:", error);
-      res.status(500).json({ message: "Failed to fetch best odds" });
-    }
-  });
-
-  // Line movement history
-  app.get("/api/games/:gameId/movements", async (req, res) => {
-    try {
-      const { gameId } = req.params as { gameId: string };
-      const hours = parseInt((req.query.hours as string) ?? "24", 10);
-      const movements = await storage.getLineMovements(gameId, hours);
-      res.json(movements);
-    } catch (error) {
-      console.error("Error fetching line movements:", error);
-      res.status(500).json({ message: "Failed to fetch line movements" });
-    }
-  });
-
-  // Alias for big movers
-  app.get("/api/line-movements/big-movers", async (req, res) => {
-    try {
-      const hours = parseInt((req.query.hours as string) ?? "24", 10);
-      const minMovement = parseFloat((req.query.minMovement as string) ?? "1.0");
-      const bigMovers = await storage.getBigMovers(hours, minMovement);
-      res.json(bigMovers);
-    } catch (error) {
-      console.error("Error fetching big movers:", error);
-      res.status(500).json({ message: "Failed to fetch big movers" });
+      res.status(500).json({ message: "Failed to sync odds" });
     }
   });
 
   // =========================
-  // Additional SportsDataIO Features
-  // =========================
-
-  // Player stats
-  app.get("/api/players/:sport", async (req, res) => {
-    try {
-      const { sport } = req.params;
-      const season = req.query.season as string;
-      const players = await sportsDataIoService.getPlayerStats(sport, season);
-      res.json({
-        sport,
-        season: season || "current",
-        players,
-        provider: "SportsDataIO"
-      });
-    } catch (error) {
-      console.error("Error fetching player stats:", error);
-      res.status(500).json({ message: "Failed to fetch player stats" });
-    }
-  });
-
-  // Team standings
-  app.get("/api/standings/:sport", async (req, res) => {
-    try {
-      const { sport } = req.params;
-      const standings = await sportsDataIoService.getStandings(sport);
-      res.json({
-        sport,
-        standings,
-        provider: "SportsDataIO"
-      });
-    } catch (error) {
-      console.error("Error fetching standings:", error);
-      res.status(500).json({ message: "Failed to fetch standings" });
-    }
-  });
-
-  // --- Best odds summary (returns the single best HOME and AWAY price) ---
-  app.get("/api/games/:gameId/best-odds/summary", async (req, res) => {
-    try {
-      const { gameId } = req.params as { gameId: string };
-      const market = (req.query.market as string) || "spreads";
-
-      // Pull all odds for this game & market
-      const all = await storage.getOddsByGame(gameId);
-
-      // Filter to target market only
-      const rows = all.filter((r: any) => r.market === market);
-
-      // Reduce to best per outcome
-      const best = rows.reduce(
-        (acc: any, row: any) => {
-          const side = row.outcomeType; // 'home' | 'away' | 'over' | 'under'
-          const priceNum = Number(row.price);
-          if (!Number.isFinite(priceNum)) return acc;
-
-          if (!acc[side] || priceNum > Number(acc[side].price)) {
-            acc[side] = {
-              gameId: row.gameId,
-              market: row.market,
-              outcomeType: row.outcomeType,
-              price: row.price,
-              point: row.point,
-              bookmakerId: row.bookmakerId,
-              bookmakerTitle: row.bookmakerTitle ?? row.bookmakerId,
-              lastUpdate: row.lastUpdate ?? null,
-            };
-          }
-          return acc;
-        },
-        {} as Record<string, any>
-      );
-
-      res.json({
-        gameId,
-        market,
-        bestHome: best.home ?? null,
-        bestAway: best.away ?? null,
-        bestOver: best.over ?? null,
-        bestUnder: best.under ?? null,
-      });
-    } catch (error) {
-      console.error("Error fetching best-odds summary:", error);
-      res.status(500).json({ message: "Failed to fetch best-odds summary" });
-    }
-  });
-
-  // --- Upcoming games with best-odds summary (UI-friendly feed) ---
-  app.get("/api/games/with-best", async (req, res) => {
-    try {
-      const market = (req.query.market as string) || "spreads";
-      const limit = Math.min(parseInt((req.query.limit as string) ?? "25", 10) || 25, 100);
-
-      // 1) get upcoming games
-      const games = await storage.getUpcomingGames();
-
-      // 2) compute best odds per game for requested market
-      const rows: any[] = [];
-      for (const g of games.slice(0, limit)) {
-        const all = await storage.getOddsByGame(g.id);
-        const mktRows = all.filter((r: any) => r.market === market);
-
-        const best = mktRows.reduce(
-          (acc: any, row: any) => {
-            const side = row.outcomeType; // home | away | over | under
-            const priceNum = Number(row.price);
-            if (!Number.isFinite(priceNum)) return acc;
-            if (!acc[side] || priceNum > Number(acc[side].price)) {
-              acc[side] = {
-                price: row.price,
-                point: row.point,
-                bookmakerId: row.bookmakerId,
-                bookmakerTitle: row.bookmakerTitle ?? row.bookmakerId,
-                lastUpdate: row.lastUpdate ?? null,
-              };
-            }
-            return acc;
-          },
-          {} as Record<string, any>
-        );
-
-        rows.push({
-          id: g.id,
-          sportId: g.sportId,
-          homeTeam: g.homeTeam,
-          awayTeam: g.awayTeam,
-          commenceTime: g.commenceTime,
-          market,
-          bestHome: best.home ?? null,
-          bestAway: best.away ?? null,
-          bestOver: best.over ?? null,
-          bestUnder: best.under ?? null,
-        });
-      }
-
-      res.json({ count: rows.length, games: rows });
-    } catch (err) {
-      console.error("Error in /api/games/with-best:", err);
-      res.status(500).json({ message: "Failed to build games + best odds feed" });
-    }
-  });
-
-  // =========================
-  // Placeholders for auth features (disabled)
-  // =========================
-  app.get("/api/favorites", async (_req, res) => res.status(501).json({ message: "Favorites not enabled yet" }));
-  app.post("/api/favorites/toggle", async (_req, res) => res.status(501).json({ message: "Favorites not enabled yet" }));
-  app.get("/api/alerts", async (_req, res) => res.status(501).json({ message: "Alerts not enabled yet" }));
-  app.post("/api/alerts", async (_req, res) => res.status(501).json({ message: "Alerts not enabled yet" }));
-  app.delete("/api/alerts/:alertId", async (_req, res) => res.status(501).json({ message: "Alerts not enabled yet" }));
-
-  // Usage (SportsDataIO)
-  app.get("/api/usage", async (_req, res) => {
-    try {
-      const usage = await sportsDataIoService.getApiUsage();
-      res.json(usage);
-    } catch (error) {
-      console.error("Error fetching API usage:", error);
-      res.status(500).json({ message: "Failed to fetch API usage" });
-    }
-  });
-
-  // =========================
-  // Seed functionality for SportsDataIO
+  // Seed functionality for SportsDataIO (also fixed)
   // =========================
   app.post("/seed/sportsdata", async (req, res) => {
     try {
@@ -530,11 +294,23 @@ export function registerRoutes(app: Express): Express {
           for (const market of bookmaker.markets || []) {
             for (const outcome of market.outcomes || []) {
               let outcomeType = "";
+
               if (market.key === "h2h" || market.key === "spreads") {
-                outcomeType = outcome.name === event.home_team ? "home" : "away";
+                const n = String(outcome.name || "").toLowerCase();
+                const homeTeam = String(event.home_team || "").toLowerCase();
+                const awayTeam = String(event.away_team || "").toLowerCase();
+
+                if (n.includes("home") || n === homeTeam) {
+                  outcomeType = "home";
+                } else if (n.includes("away") || n === awayTeam) {
+                  outcomeType = "away";
+                }
               } else if (market.key === "totals") {
-                outcomeType = outcome.name?.toLowerCase() === "over" ? "over" : "under";
+                const n = String(outcome.name || "").toLowerCase();
+                if (n === "over") outcomeType = "over";
+                if (n === "under") outcomeType = "under";
               }
+
               if (!outcomeType) continue;
 
               await storage.upsertOdds({
@@ -562,11 +338,7 @@ export function registerRoutes(app: Express): Express {
       });
     } catch (err: any) {
       console.error("Seed from SportsDataIO failed:", err);
-      return res.status(500).json({
-        ok: false,
-        message: "Seed from SportsDataIO failed",
-        error: String(err?.message || err)
-      });
+      return res.status(500).json({ ok: false, message: "Seed from SportsDataIO failed" });
     }
   });
 
