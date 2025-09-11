@@ -221,59 +221,88 @@ export class SportsDataIoService {
   }
 
   // Safe normalizer for odds payloads
-  private transformOddsData(raw: any[], fallbackSportKey?: string) {
-    if (!Array.isArray(raw)) return [];
+  // server/services/sportsDataIoApi.ts
+// ...
+private transformOddsData(raw: any[], fallbackSportKey?: string) {
+  return (raw ?? []).map((event: any) => {
+    // Normalize common SportsDataIO fields
+    const commence =
+      event.commence_time ??
+      event.commenceTime ??
+      event.DateTime ??
+      event.Day ??
+      null;
 
-    return raw.map((event: any) => {
-      const bookmakers = Array.isArray(event?.bookmakers)
-        ? event.bookmakers.map((bm: any) => ({
-            key: bm?.key ?? bm?.Key ?? "unknown",
-            title: bm?.title ?? bm?.Title ?? bm?.key ?? "Unknown",
-            last_update: bm?.last_update ?? bm?.LastUpdate ?? null,
-            markets: Array.isArray(bm?.markets ?? bm?.Markets)
-              ? (bm.markets ?? bm.Markets).map((m: any) => ({
-                  key: m?.key ?? m?.Key ?? "h2h",
-                  last_update: m?.last_update ?? m?.LastUpdate ?? bm?.last_update ?? null,
-                  outcomes: Array.isArray(m?.outcomes ?? m?.Outcomes)
-                    ? (m.outcomes ?? m.Outcomes).map((o: any) => ({
-                        name: o?.name ?? o?.Name ?? null,
-                        price: Number(o?.price ?? o?.Price),
-                        point: o?.point ?? o?.Point ?? null,
-                      }))
-                    : [],
-                }))
-              : [],
-          }))
-        : [];
+    const homeTeam =
+      event.home_team ??
+      event.homeTeam ??
+      event.HomeTeam ??
+      event.HomeTeamName ??
+      null;
 
-      return {
-        id:
-          event?.id ??
-          event?.GameID?.toString?.() ??
-          `${fallbackSportKey ?? "SPORT"}_${Date.now()}_${Math.random()}`,
-        sport_key:
-          event?.sport_key ??
-          event?.sportKey ??
-          event?.sport ??
-          (fallbackSportKey ?? null),
-        // ↓↓↓ FIXED precedence: no "??" mixed with "||" without parens
-        sport_title:
-          (event?.sport_title ??
-            event?.sportTitle ??
-            fallbackSportKey ??
-            null),
-        commence_time:
-          event?.commence_time ?? event?.commenceTime ?? event?.DateTime ?? null,
-        home_team: event?.home_team ?? event?.homeTeam ?? event?.HomeTeam ?? null,
-        away_team: event?.away_team ?? event?.awayTeam ?? event?.AwayTeam ?? null,
-        completed: Boolean(event?.completed ?? event?.IsClosed),
-        home_score: event?.home_score ?? event?.HomeScore ?? null,
-        away_score: event?.away_score ?? event?.AwayScore ?? null,
-        status: event?.status ?? event?.Status ?? "Scheduled",
-        bookmakers,
-      };
-    });
-  }
+    const awayTeam =
+      event.away_team ??
+      event.awayTeam ??
+      event.AwayTeam ??
+      event.AwayTeamName ??
+      null;
+
+    // Many SportsDataIO odds payloads don’t include “bookmakers/markets/outcomes”
+    // in the TheOddsAPI shape. If it’s not present, leave an empty array.
+    const bookmakers = Array.isArray(event.bookmakers ?? event.Bookmakers ?? event.PregameOdds)
+      ? (event.bookmakers ?? event.Bookmakers ?? []).map((bm: any) => ({
+          key: bm.key ?? bm.Key ?? bm.Sportsbook ?? "unknown",
+          title: bm.title ?? bm.Title ?? bm.Sportsbook ?? "Unknown",
+          last_update: bm.last_update ?? bm.LastUpdate ?? null,
+          markets: (bm.markets ?? bm.Markets ?? []).map((m: any) => ({
+            key: m.key ?? m.Key ?? "h2h",
+            last_update: m.last_update ?? m.LastUpdate ?? bm.last_update ?? null,
+            outcomes: (m.outcomes ?? m.Outcomes ?? []).map((o: any) => ({
+              name: o.name ?? o.Name ?? null,
+              price: Number(o.price ?? o.Price),
+              point: o.point ?? o.Point ?? null,
+            })),
+          })),
+        }))
+      : [];
+
+    return {
+      id:
+        event.id ??
+        event.GameID?.toString?.() ??
+        event.GameId?.toString?.() ??
+        event.GameKey ??
+        `${(fallbackSportKey || "NFL")}_${Date.now()}_${Math.random()}`,
+
+      sport_key:
+        event.sport_key ??
+        event.sportKey ??
+        event.sport ??
+        fallbackSportKey ??
+        "NFL",
+
+      sport_title:
+        event.sport_title ??
+        event.sportTitle ??
+        (fallbackSportKey ?? "NFL"),
+
+      commence_time: commence,
+      home_team: homeTeam,
+      away_team: awayTeam,
+
+      completed: Boolean(
+        event.completed ||
+          event.IsClosed === true ||
+          event.Status === "Final"
+      ),
+      home_score: event.home_score ?? event.HomeScore ?? null,
+      away_score: event.away_score ?? event.AwayScore ?? null,
+      status: event.status ?? event.Status ?? "Scheduled",
+
+      bookmakers,
+    };
+  });
+}
 
   private convertAmericanToDecimal(americanOdds: number): number {
     return americanOdds > 0
