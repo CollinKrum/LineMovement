@@ -64,27 +64,42 @@ export class SportsDataIoService {
     }));
   }
 
-  async getGames(sport: string): Promise<any[]> {
-    const sportEndpoint = this.getSportEndpoint(sport);
-    if (!sportEndpoint) throw new Error(`Unsupported sport: ${sport}`);
+  // Get games/schedules for a sport
+async getGames(sport: string): Promise<any[]> {
+  const sportEndpoint = this.getSportEndpoint(sport);
+  if (!sportEndpoint) throw new Error(`Unsupported sport: ${sport}`);
 
-    const currentSeason = this.getCurrentSeason(sport);
+  const currentSeason = this.getCurrentSeason(sport);
 
-    try {
-      let url = `${this.baseUrl}/${sportEndpoint}/scores/json/Games/${currentSeason}`;
+  try {
+    // Prefer week-based for NFL / NCAAF
+    if (sport.toUpperCase() === "NFL" || sport.toUpperCase() === "NCAAF") {
+      const currentWeek = await this.getCurrentWeek(sportEndpoint);
+      const weekUrl = `${this.baseUrl}/${sportEndpoint}/scores/json/GamesByWeek/${currentSeason}/${currentWeek}`;
 
-      if (sport.toUpperCase() === "NFL" || sport.toUpperCase() === "NCAAF") {
-        const currentWeek = await this.getCurrentWeek(sportEndpoint);
-        url = `${this.baseUrl}/${sportEndpoint}/scores/json/GamesByWeek/${currentSeason}/${currentWeek}`;
+      try {
+        const gamesByWeek = await this.fetchWithRetry(weekUrl);
+        return this.transformGames(gamesByWeek, sport);
+      } catch (err: any) {
+        // If that specific week 404s, fall back to the full season schedule
+        if (err?.status === 404) {
+          const schedUrl = `${this.baseUrl}/${sportEndpoint}/scores/json/Schedules/${currentSeason}`;
+          const schedule = await this.fetchWithRetry(schedUrl);
+          return this.transformGames(schedule, sport);
+        }
+        throw err;
       }
-
-      const games = await this.fetchWithRetry(url);
-      return this.transformGames(games, sport);
-    } catch (error) {
-      console.error(`Error fetching games for ${sport}:`, error);
-      return [];
     }
+
+    // Non week-based sports: use full season schedule directly
+    const schedUrl = `${this.baseUrl}/${sportEndpoint}/scores/json/Schedules/${currentSeason}`;
+    const schedule = await this.fetchWithRetry(schedUrl);
+    return this.transformGames(schedule, sport);
+  } catch (error) {
+    console.error(`Error fetching games for ${sport}:`, error);
+    return [];
   }
+}
 
   async getOdds(sport: string, limit = 25): Promise<any[]> {
     const sportEndpoint = this.getSportEndpoint(sport);
