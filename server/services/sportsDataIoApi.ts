@@ -1,4 +1,3 @@
-// src/services/sportsDataIoApi.ts
 export class SportsDataIoService {
   private apiKey: string;
   private baseUrl = "https://api.sportsdata.io/v3";
@@ -11,7 +10,6 @@ export class SportsDataIoService {
   }
 
   private async fetchWithRetry(url: string, attempt = 1): Promise<any> {
-    // Optional debug
     if (process.env.DEBUG_SYNC === "1") {
       const safe = `${url}?key=***`;
       console.log("[fetch] URL:", safe);
@@ -75,7 +73,6 @@ export class SportsDataIoService {
     try {
       let url = `${this.baseUrl}/${sportEndpoint}/scores/json/Games/${currentSeason}`;
 
-      // NFL / NCAAF use week-based endpoints
       if (sport.toUpperCase() === "NFL" || sport.toUpperCase() === "NCAAF") {
         const currentWeek = await this.getCurrentWeek(sportEndpoint);
         url = `${this.baseUrl}/${sportEndpoint}/scores/json/GamesByWeek/${currentSeason}/${currentWeek}`;
@@ -119,14 +116,12 @@ export class SportsDataIoService {
       }
 
       const odds = await this.fetchWithRetry(url);
-      // Pass the sport as a fallback so sport_key/title are never null
       return this.transformOddsData(
         (Array.isArray(odds) ? odds : []).slice(0, limit),
         sport
       );
     } catch (error) {
       console.error(`Error fetching odds for ${sport}:`, error);
-      // Graceful fallback: return skeleton events (no bookmakers)
       const games = await this.getGames(sport);
       return games.slice(0, limit).map((g) => ({ ...g, bookmakers: [] }));
     }
@@ -136,7 +131,6 @@ export class SportsDataIoService {
     const sportEndpoint = this.getSportEndpoint(sport);
     if (!sportEndpoint) throw new Error(`Unsupported sport: ${sport}`);
 
-    // SDIO player endpoint often ignores season param; keep simple
     const url = `${this.baseUrl}/${sportEndpoint}/scores/json/Players`;
 
     try {
@@ -226,16 +220,12 @@ export class SportsDataIoService {
     }));
   }
 
-  /**
-   * Normalize odds payloads.
-   * NOTE: This version never references an undefined variable
-   * and safely guards every nested array access.
-   */
+  // Safe normalizer for odds payloads
   private transformOddsData(raw: any[], fallbackSportKey?: string) {
     if (!Array.isArray(raw)) return [];
 
     return raw.map((event: any) => {
-      const bookmakers = Array.isArray(event.bookmakers)
+      const bookmakers = Array.isArray(event?.bookmakers)
         ? event.bookmakers.map((bm: any) => ({
             key: bm?.key ?? bm?.Key ?? "unknown",
             title: bm?.title ?? bm?.Title ?? bm?.key ?? "Unknown",
@@ -246,7 +236,7 @@ export class SportsDataIoService {
                   last_update: m?.last_update ?? m?.LastUpdate ?? bm?.last_update ?? null,
                   outcomes: Array.isArray(m?.outcomes ?? m?.Outcomes)
                     ? (m.outcomes ?? m.Outcomes).map((o: any) => ({
-                        name: o?.name ?? o?.Name ?? null, // can be "Home", "Away", "Over", "Under" or team name
+                        name: o?.name ?? o?.Name ?? null,
                         price: Number(o?.price ?? o?.Price),
                         point: o?.point ?? o?.Point ?? null,
                       }))
@@ -257,10 +247,23 @@ export class SportsDataIoService {
         : [];
 
       return {
-        id: event?.id ?? event?.GameID?.toString?.() ?? `${fallbackSportKey ?? "SPORT"}_${Date.now()}_${Math.random()}`,
-        sport_key: event?.sport_key ?? event?.sportKey ?? event?.sport ?? fallbackSportKey ?? null,
-        sport_title: event?.sport_title ?? event?.sportTitle ?? (fallbackSportKey ?? "") || null,
-        commence_time: event?.commence_time ?? event?.commenceTime ?? event?.DateTime ?? null,
+        id:
+          event?.id ??
+          event?.GameID?.toString?.() ??
+          `${fallbackSportKey ?? "SPORT"}_${Date.now()}_${Math.random()}`,
+        sport_key:
+          event?.sport_key ??
+          event?.sportKey ??
+          event?.sport ??
+          (fallbackSportKey ?? null),
+        // ↓↓↓ FIXED precedence: no "??" mixed with "||" without parens
+        sport_title:
+          (event?.sport_title ??
+            event?.sportTitle ??
+            fallbackSportKey ??
+            null),
+        commence_time:
+          event?.commence_time ?? event?.commenceTime ?? event?.DateTime ?? null,
         home_team: event?.home_team ?? event?.homeTeam ?? event?.HomeTeam ?? null,
         away_team: event?.away_team ?? event?.awayTeam ?? event?.AwayTeam ?? null,
         completed: Boolean(event?.completed ?? event?.IsClosed),
@@ -278,7 +281,6 @@ export class SportsDataIoService {
       : 100 / Math.abs(americanOdds) + 1;
   }
 
-  // Mock usage (SportsDataIO doesn’t expose usage on all plans)
   async getApiUsage(): Promise<{ requests_used: number; requests_remaining: number }> {
     return { requests_used: 0, requests_remaining: 1000 };
   }
