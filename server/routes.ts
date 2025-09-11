@@ -188,27 +188,32 @@ export function registerRoutes(app: Express): Express {
               lastUpdate,
             });
 
-            for (const market of bookmaker.markets || []) {
-              for (const outcome of market.outcomes || []) {
-                let outcomeType = "";
-                if (market.key === "h2h" || market.key === "spreads") {
-                  outcomeType = outcome.name === event.home_team ? "home" : "away";
-                } else if (market.key === "totals") {
-                  outcomeType = outcome.name?.toLowerCase() === "over" ? "over" : "under";
-                }
-                if (!outcomeType) continue;
+    for (const market of bookmaker.markets || []) {
+    for (const outcome of market.outcomes || []) {
+    let outcomeType = "";
 
-                await storage.upsertOdds({
-                  gameId: event.id,
-                  bookmakerId: bookmaker.key,
-                  market: market.key,
-                  outcomeType,
-                  price: String(outcome.price),
-                  point: outcome.point != null ? String(outcome.point) : null,
-                });
-                oddsUpdated++;
-              }
-            }
+    if (market.key === "h2h" || market.key === "spreads") {
+      const n = String(outcome.name || "").toLowerCase();
+      if (n === "home" || outcome.name === event.home_team) outcomeType = "home";
+      else if (n === "away" || outcome.name === event.away_team) outcomeType = "away";
+    } else if (market.key === "totals") {
+      const n = String(outcome.name || "").toLowerCase();
+      outcomeType = n === "over" ? "over" : n === "under" ? "under" : "";
+    }
+
+    if (!outcomeType) continue;
+
+    await storage.upsertOdds({
+      gameId: event.id,
+      bookmakerId: bookmaker.key,
+      market: market.key,
+      outcomeType,
+      price: String(outcome.price),
+      point: outcome.point != null ? String(outcome.point) : null,
+    });
+    oddsUpdated++;
+  }
+}
           }
         }
 
