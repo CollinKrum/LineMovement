@@ -1,5 +1,9 @@
+// server/index.ts
 import express, { type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
+import path from "node:path";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import { registerRoutes } from "./routes.js";
 
 const app = express();
@@ -43,25 +47,24 @@ app.get("/health", (_req: Request, res: Response) => {
 /** Register all API routes */
 registerRoutes(app);
 
-/** Centralized error handler */
-app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  const status = err?.status || err?.statusCode || 500;
-  const message = err?.message || "Internal Server Error";
-  res.status(status).json({ message });
-  console.error(err);
-});
+/** Serve built client if present (dist/client) */
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+// When bundled, __dirname will be .../dist/server
+const clientDir = path.join(__dirname, "../client");
+const clientIndex = path.join(clientDir, "index.html");
+const hasClient = fs.existsSync(clientIndex);
 
-/** Start server */
-const port = parseInt(process.env.PORT || "8080", 10);
-app.listen(port, "0.0.0.0", () => {
-  console.log(`🚀 LineTracker API listening on :${port}`);
-  console.log(`📊 Powered by SportsDataIO`);
-  console.log(`🔑 API Key: ${process.env.SPORTSDATAIO_API_KEY ? 'Set' : 'Missing'}`);
-});
-
-// Simple browser UI at "/"
-app.get("/", (_req, res) => {
-  res.type("html").send(`<!doctype html>
+if (hasClient) {
+  app.use(express.static(clientDir));
+  // SPA fallback for non-API routes
+  app.get(/^\/(?!api\/).*/, (_req, res) => {
+    res.sendFile(clientIndex);
+  });
+} else {
+  // Simple browser UI at "/"
+  app.get("/", (_req, res) => {
+    res.type("html").send(`<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
@@ -126,12 +129,11 @@ app.get("/", (_req, res) => {
       const limit = document.getElementById('limit').value || 10;
       const status = document.getElementById('status');
       status.textContent = 'Syncing...';
-      
       try {
         const res = await fetch('/api/odds/sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sport })
+          body: JSON.stringify({ sport, limit: Number(limit) })
         });
         const data = await res.json();
         status.textContent = \`Synced: \${data.gamesUpdated || 0} games, \${data.oddsUpdated || 0} odds\`;
@@ -140,48 +142,55 @@ app.get("/", (_req, res) => {
         status.textContent = 'Sync error: ' + (e.message || e);
       }
     }
-    
     async function loadGames() {
       const sport = document.getElementById('sport').value;
       const status = document.getElementById('status');
       status.textContent = 'Loading games...';
-      
       try {
         const res = await fetch('/api/games?sport=' + encodeURIComponent(sport));
         const games = await res.json();
         const tbody = document.querySelector('#tbl tbody');
         tbody.innerHTML = '';
-        
         games.forEach(g => {
           const tr = document.createElement('tr');
-          const score = g.homeScore !== null && g.awayScore !== null 
-            ? \`\${g.awayScore}-\${g.homeScore}\` 
-            : '-';
-          const startTime = new Date(g.commenceTime).toLocaleDateString();
-          const status = g.completed ? 'Final' : 'Scheduled';
-          
+          const score = g.homeScore != null && g.awayScore != null ? \`\${g.awayScore}-\${g.homeScore}\` : '-';
+          const startTime = g.commenceTime ? new Date(g.commenceTime).toLocaleString() : '-';
+          const statusTxt = g.completed ? 'Final' : (g.status || 'Scheduled');
           tr.innerHTML = \`
             <td><strong>\${g.awayTeam}</strong> @ <strong>\${g.homeTeam}</strong></td>
             <td>\${startTime}</td>
-            <td>\${status}</td>
+            <td>\${statusTxt}</td>
             <td>\${score}</td>
-            <td>0 books</td>
+            <td>\${(g.bookmakers?.length || 0)} books</td>
           \`;
           tbody.appendChild(tr);
         });
-        
         status.textContent = \`Loaded \${games.length} games\`;
       } catch (e) {
         status.textContent = 'Load error: ' + (e.message || e);
       }
     }
-    
     document.getElementById('sync').addEventListener('click', syncData);
     document.getElementById('refresh').addEventListener('click', loadGames);
-    
-    // Auto-load on page load
     loadGames();
   </script>
 </body>
 </html>`);
+  });
+}
+
+/** Centralized error handler */
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  const status = err?.status || err?.statusCode || 500;
+  const message = err?.message || "Internal Server Error";
+  res.status(status).json({ message });
+  console.error(err);
+});
+
+/** Start server */
+const port = parseInt(process.env.PORT || "8080", 10);
+app.listen(port, "0.0.0.0", () => {
+  console.log(`🚀 LineTracker API listening on :${port}`);
+  console.log(`📊 Powered by SportsDataIO`);
+  console.log(`🔑 API Key: ${process.env.SPORTSDATAIO_API_KEY ? "Set" : "Missing"}`);
 });
