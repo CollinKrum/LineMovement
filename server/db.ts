@@ -7,7 +7,7 @@ const connectionString = process.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL is not set");
 
 // Neon requires TLS; Render is fine with it.
-const pool = new Pool({
+export const pool = new Pool({
   connectionString,
   ssl: { rejectUnauthorized: false }
 });
