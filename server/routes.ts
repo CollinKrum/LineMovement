@@ -1,10 +1,9 @@
 import type { Express } from "express";
 import { storage } from "./storage.js";
-import { sportsDataIoService } from "./services/sportsDataIoApi.js";  // Updated import
+import { sportsDataIoService } from "./services/sportsDataIoApi.js";
 import { db } from "./db.js";
 import { sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { pool, db } from "./db.js";
 
 /** Register API routes on the provided Express app. */
 export function registerRoutes(app: Express): Express {
@@ -68,10 +67,10 @@ export function registerRoutes(app: Express): Express {
     try {
       const sport = (req.query.sport as string) || "NFL";
       const games = await sportsDataIoService.getGames(sport);
-      res.json({ 
-        ok: true, 
-        sport, 
-        count: games.length, 
+      res.json({
+        ok: true,
+        sport,
+        count: games.length,
         sample: games.slice(0, 2),
         provider: "SportsDataIO"
       });
@@ -110,7 +109,7 @@ export function registerRoutes(app: Express): Express {
           hasOutrights: sport.has_outrights,
         });
       }
-      res.json({ 
+      res.json({
         message: `Synced ${sports.length} sports`,
         provider: "SportsDataIO"
       });
@@ -137,7 +136,7 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
-  // NEW: GET /api/odds?sport=NFL&limit=5
+  // NEW: GET /api/odds?sport=NFL&limit=25
   app.get("/api/odds", async (req, res, next) => {
     try {
       const sport = (req.query.sport as string) || "NFL";
@@ -262,7 +261,7 @@ export function registerRoutes(app: Express): Express {
     try {
       const { gameId } = req.params as { gameId: string };
       const market = req.query.market as string | undefined;
-      if (!market) return res.status(400).json({ message: "Market parameter is required" });
+    if (!market) return res.status(400).json({ message: "Market parameter is required" });
 
       const bestOdds = await storage.getBestOdds(gameId, market);
       res.json(bestOdds);
@@ -385,7 +384,7 @@ export function registerRoutes(app: Express): Express {
       res.status(500).json({ message: "Failed to fetch best-odds summary" });
     }
   });
-  
+
   // --- Upcoming games with best-odds summary (UI-friendly feed) ---
   app.get("/api/games/with-best", async (req, res) => {
     try {
@@ -439,8 +438,8 @@ export function registerRoutes(app: Express): Express {
       console.error("Error in /api/games/with-best:", err);
       res.status(500).json({ message: "Failed to build games + best odds feed" });
     }
-  }); 
-  
+  });
+
   // =========================
   // Placeholders for auth features (disabled)
   // =========================
@@ -551,11 +550,24 @@ export function registerRoutes(app: Express): Express {
       });
     } catch (err: any) {
       console.error("Seed from SportsDataIO failed:", err);
-      return res.status(500).json({ 
-        ok: false, 
-        message: "Seed from SportsDataIO failed", 
-        error: String(err?.message || err) 
+      return res.status(500).json({
+        ok: false,
+        message: "Seed from SportsDataIO failed",
+        error: String(err?.message || err)
       });
+    }
+  });
+
+  // =========================
+  // Admin: run Drizzle migrations on Neon
+  // =========================
+  app.post("/api/_admin/migrate", async (_req, res) => {
+    try {
+      await migrate(db, { migrationsFolder: "migrations" });
+      res.json({ ok: true, ran: true });
+    } catch (err: any) {
+      console.error("Migration failed:", err);
+      res.status(500).json({ ok: false, error: String(err?.message || err) });
     }
   });
 
