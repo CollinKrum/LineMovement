@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "license": "MIT",
- "scripts": {
+  "scripts": {
   "dev": "NODE_ENV=development tsx server/index.ts",
   "build": "esbuild ./server/index.ts --platform=node --target=node18 --packages=external --bundle --format=esm --outfile=dist/server/index.js",
   "start": "NODE_ENV=production node dist/server/index.js",
