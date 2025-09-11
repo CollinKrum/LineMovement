@@ -135,6 +135,18 @@ export function registerRoutes(app: Express): Express {
     }
   });
 
+  // NEW: GET /api/odds?sport=NFL&limit=5
+  app.get("/api/odds", async (req, res, next) => {
+    try {
+      const sport = (req.query.sport as string) || "NFL";
+      const limit = Math.max(1, parseInt(String(req.query.limit ?? "25"), 10));
+      const odds = await sportsDataIoService.getOdds(sport, limit);
+      res.json(odds);
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // Pull odds from SportsDataIO and upsert into DB
   app.post("/api/odds/sync", async (req, res) => {
     try {
