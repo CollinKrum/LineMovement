@@ -224,125 +224,38 @@ export class SportsDataIoService {
     }));
   }
 
-  private transformOddsData(oddsData: any[], sport: string): any[] {
-    if (!Array.isArray(oddsData)) return [];
+  private transformOddsData(raw: any[]) {
+  return (raw ?? []).map((event: any) => {
+    const bookmakers = (event.bookmakers ?? []).map((bm: any) => ({
+      key: bm.key ?? bm.Key ?? "unknown",
+      title: bm.title ?? bm.Title ?? bm.key ?? "Unknown",
+      last_update: bm.last_update ?? bm.LastUpdate ?? null,
+      markets: (bm.markets ?? bm.Markets ?? []).map((m: any) => ({
+        key: m.key ?? m.Key ?? "h2h",
+        last_update: m.last_update ?? m.LastUpdate ?? bm.last_update ?? null,
+        outcomes: (m.outcomes ?? m.Outcomes ?? []).map((o: any) => ({
+          name: o.name ?? o.Name ?? null,
+          price: Number(o.price ?? o.Price),
+          point: o.point ?? o.Point ?? null,
+        })),
+      })),
+    }));
 
-    return oddsData.map((game) => {
-      const bookmakers: any[] = [];
-      if (Array.isArray(game.PregameOdds)) {
-        const bookMap = new Map<string, any>();
-
-        game.PregameOdds.forEach((odd: any) => {
-          const key = odd.Sportsbook || "unknown";
-          if (!bookMap.has(key)) {
-            bookMap.set(key, {
-              key,
-              title: odd.SportsbookName || key,
-              last_update: odd.Created || new Date().toISOString(),
-              markets: [],
-            });
-          }
-          const bm = bookMap.get(key);
-
-          // Money Line (H2H)
-if (odd.HomeMoneyLine || odd.AwayMoneyLine) {
-  const outcomes = [];
-  if (odd.HomeMoneyLine) {
-    outcomes.push({
-      name: game.HomeTeam || game.HomeTeamName || 'HOME_TEAM', // <-- team, not "Home"
-      price: this.convertAmericanToDecimal(odd.HomeMoneyLine)
-    });
-  }
-  if (odd.AwayMoneyLine) {
-    outcomes.push({
-      name: game.AwayTeam || game.AwayTeamName || 'AWAY_TEAM', // <-- team, not "Away"
-      price: this.convertAmericanToDecimal(odd.AwayMoneyLine)
-    });
-  }
-  if (outcomes.length > 0) {
-    bookmaker.markets.push({
-      key: 'h2h',
-      last_update: odd.Created || new Date().toISOString(),
-      outcomes
-    });
-  }
+    return {
+      id: event.id,
+      sport_key: event.sport_key ?? event.sportKey ?? event.sport ?? "NFL",
+      sport_title: event.sport_title ?? event.sportTitle ?? "NFL",
+      commence_time: event.commence_time ?? event.commenceTime ?? null,
+      home_team: event.home_team ?? event.homeTeam ?? null,
+      away_team: event.away_team ?? event.awayTeam ?? null,
+      completed: Boolean(event.completed),
+      home_score: event.home_score ?? null,
+      away_score: event.away_score ?? null,
+      status: event.status ?? "Scheduled",
+      bookmakers,
+    };
+  });
 }
-
-          // Spreads
-          if (
-            odd.PointSpread !== undefined ||
-            odd.HomePointSpreadPayout !== undefined ||
-            odd.AwayPointSpreadPayout !== undefined
-          ) {
-            const outcomes: any[] = [];
-            if (odd.HomePointSpreadPayout != null && odd.PointSpread != null) {
-              outcomes.push({
-                name: game.HomeTeam || "Home",
-                price: this.convertAmericanToDecimal(odd.HomePointSpreadPayout),
-                point: -Math.abs(odd.PointSpread || 0),
-              });
-            }
-            if (odd.AwayPointSpreadPayout != null && odd.PointSpread != null) {
-              outcomes.push({
-                name: game.AwayTeam || "Away",
-                price: this.convertAmericanToDecimal(odd.AwayPointSpreadPayout),
-                point: Math.abs(odd.PointSpread || 0),
-              });
-            }
-            if (outcomes.length) {
-              bm.markets.push({
-                key: "spreads",
-                last_update: odd.Created || new Date().toISOString(),
-                outcomes,
-              });
-            }
-          }
-
-          // Totals
-          if (odd.OverPayout != null || odd.UnderPayout != null) {
-            const outcomes: any[] = [];
-            if (odd.OverPayout != null && odd.OverUnder != null) {
-              outcomes.push({
-                name: "Over",
-                price: this.convertAmericanToDecimal(odd.OverPayout),
-                point: odd.OverUnder,
-              });
-            }
-            if (odd.UnderPayout != null && odd.OverUnder != null) {
-              outcomes.push({
-                name: "Under",
-                price: this.convertAmericanToDecimal(odd.UnderPayout),
-                point: odd.OverUnder,
-              });
-            }
-            if (outcomes.length) {
-              bm.markets.push({
-                key: "totals",
-                last_update: odd.Created || new Date().toISOString(),
-                outcomes,
-              });
-            }
-          }
-        });
-
-        bookmakers.push(...Array.from(bookMap.values()));
-      }
-
-      return {
-        id: game.GameID?.toString() || `${sport}_${Date.now()}_${Math.random()}`,
-        sport_key: sport,
-        sport_title: sport.toUpperCase(),
-        commence_time: game.DateTime || game.Day,
-        home_team: game.HomeTeam || game.HomeTeamName || "Home Team",
-        away_team: game.AwayTeam || game.AwayTeamName || "Away Team",
-        completed: game.Status === "Final" || game.IsClosed === true,
-        home_score: game.HomeScore ?? null,
-        away_score: game.AwayScore ?? null,
-        status: game.Status || "Scheduled",
-        bookmakers,
-      };
-    });
-  }
 
   private convertAmericanToDecimal(americanOdds: number): number {
     return americanOdds > 0
