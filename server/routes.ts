@@ -155,81 +155,94 @@ export function registerRoutes(app: Express): Express {
       if (!sport) return res.status(400).json({ message: "Sport parameter is required" });
 
       const limit = Math.max(1, parseInt(String(req.query.limit ?? "25"), 10));
-      let gamesUpdated = 0;
-      let oddsUpdated = 0;
+      // inside app.post("/api/odds/sync", async (req, res) => { ... })
 
-      const oddsData = await sportsDataIoService.getOdds(sport, limit);
+let gamesUpdated = 0;
+let oddsUpdated = 0;
+let gamesSkipped = 0; // <— track skips
 
-      for (const event of oddsData) {
-        const commenceTime = event.commence_time ? new Date(event.commence_time) : new Date();
-        if (isNaN(commenceTime.getTime())) continue;
+const oddsData = await sportsDataIoService.getOdds(sport, limit);
 
-        await storage.upsertGame({
-          id: event.id,
-          sportId: event.sport_key,
-          homeTeam: event.home_team,
-          awayTeam: event.away_team,
-          commenceTime,
-          completed: event.completed || false,
-          homeScore: event.home_score,
-          awayScore: event.away_score,
-        });
-        gamesUpdated++;
+for (const event of oddsData) {
+  // Hard guard: don’t write invalid rows
+  if (!event?.home_team || !event?.away_team || !event?.commence_time) {
+    gamesSkipped++;
+    continue;
+  }
 
-        for (const bookmaker of event.bookmakers || []) {
-          const lastUpdate = bookmaker.last_update ? new Date(bookmaker.last_update) : new Date();
-          if (isNaN(lastUpdate.getTime())) continue;
+  const commenceTime = new Date(event.commence_time);
+  if (isNaN(commenceTime.getTime())) {
+    gamesSkipped++;
+    continue;
+  }
 
-          await storage.upsertBookmaker({
-            id: bookmaker.key,
-            title: bookmaker.title,
-            lastUpdate,
-          });
+  await storage.upsertGame({
+    id: event.id,
+    sportId: event.sport_key,
+    homeTeam: event.home_team,
+    awayTeam: event.away_team,
+    commenceTime,
+    completed: Boolean(event.completed),
+    homeScore: event.home_score ?? null,
+    awayScore: event.away_score ?? null,
+  });
+  gamesUpdated++;
 
-          for (const market of bookmaker.markets || []) {
-            for (const outcome of market.outcomes || []) {
-              let outcomeType = "";
+  // Bookmakers may be empty for some SportsDataIO plans — that’s fine
+  for (const bm of event.bookmakers || []) {
+    const lastUpdate = bm.last_update ? new Date(bm.last_update) : new Date();
+    if (isNaN(lastUpdate.getTime())) continue;
 
-              if (market.key === "h2h" || market.key === "spreads") {
-                const n = String(outcome.name || "").toLowerCase();
-                const homeTeam = String(event.home_team || "").toLowerCase();
-                const awayTeam = String(event.away_team || "").toLowerCase();
+    await storage.upsertBookmaker({
+      id: bm.key,
+      title: bm.title,
+      lastUpdate,
+    });
 
-                if (n.includes("home") || n === homeTeam) {
-                  outcomeType = "home";
-                } else if (n.includes("away") || n === awayTeam) {
-                  outcomeType = "away";
-                }
-              } else if (market.key === "totals") {
-                const n = String(outcome.name || "").toLowerCase();
-                if (n === "over") outcomeType = "over";
-                if (n === "under") outcomeType = "under";
-              }
+    for (const market of bm.markets || []) {
+      for (const outcome of market.outcomes || []) {
+        let outcomeType = "";
 
-              if (!outcomeType) continue;
+        if (market.key === "h2h" || market.key === "spreads") {
+          const n = String(outcome.name || "").toLowerCase();
+          const home = String(event.home_team || "").toLowerCase();
+          const away = String(event.away_team || "").toLowerCase();
 
-              await storage.upsertOdds({
-                gameId: event.id,
-                bookmakerId: bookmaker.key,
-                market: market.key,
-                outcomeType,
-                price: String(outcome.price),
-                point: outcome.point != null ? String(outcome.point) : null,
-              });
-              oddsUpdated++;
-            }
-          }
+          const isHome = n === "home" || n.includes("home") || n === home || (home && n.includes(home));
+          const isAway = n === "away" || n.includes("away") || n === away || (away && n.includes(away));
+
+          if (isHome) outcomeType = "home";
+          else if (isAway) outcomeType = "away";
+        } else if (market.key === "totals") {
+          const n = String(outcome.name || "").toLowerCase();
+          outcomeType = n === "over" ? "over" : n === "under" ? "under" : "";
         }
-      }
 
-      res.json({
-        message: `Synced ${gamesUpdated} games and ${oddsUpdated} odds entries`,
-        sport,
-        limit,
-        gamesUpdated,
-        oddsUpdated,
-        provider: "SportsDataIO"
-      });
+        if (!outcomeType) continue;
+
+        await storage.upsertOdds({
+          gameId: event.id,
+          bookmakerId: bm.key,
+          market: market.key,
+          outcomeType,
+          price: String(outcome.price),
+          point: outcome.point != null ? String(outcome.point) : null,
+        });
+        oddsUpdated++;
+      }
+    }
+  }
+}
+
+return res.json({
+  message: `Synced ${gamesUpdated} games and ${oddsUpdated} odds entries`,
+  sport,
+  limit,
+  gamesUpdated,
+  oddsUpdated,
+  gamesSkipped, // <— visible in response for transparency
+  provider: "SportsDataIO",
+});
     } catch (error: any) {
       console.error("Error syncing odds:", error);
       res.status(500).json({ message: "Failed to sync odds" });
