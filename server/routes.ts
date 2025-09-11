@@ -159,92 +159,99 @@ export function registerRoutes(app: Express): Express {
       let gamesUpdated = 0;
       let oddsUpdated = 0;
 
-      try {
-        const oddsData = await sportsDataIoService.getOdds(sport, limit);
+      const oddsData = await sportsDataIoService.getOdds(sport, limit);
 
-        for (const event of oddsData) {
-          const commenceTime = event.commence_time ? new Date(event.commence_time) : new Date();
-          if (isNaN(commenceTime.getTime())) continue;
+      for (const event of oddsData) {
+        const commenceTime = event.commence_time ? new Date(event.commence_time) : new Date();
+        if (isNaN(commenceTime.getTime())) continue;
 
-          await storage.upsertGame({
-            id: event.id,
-            sportId: event.sport_key,
-            homeTeam: event.home_team,
-            awayTeam: event.away_team,
-            commenceTime,
-            completed: event.completed || false,
-            homeScore: event.home_score,
-            awayScore: event.away_score,
+        await storage.upsertGame({
+          id: event.id,
+          sportId: event.sport_key,
+          homeTeam: event.home_team,
+          awayTeam: event.away_team,
+          commenceTime,
+          completed: event.completed || false,
+          homeScore: event.home_score,
+          awayScore: event.away_score,
+        });
+        gamesUpdated++;
+
+        for (const bookmaker of event.bookmakers || []) {
+          const lastUpdate = bookmaker.last_update ? new Date(bookmaker.last_update) : new Date();
+          if (isNaN(lastUpdate.getTime())) continue;
+
+          await storage.upsertBookmaker({
+            id: bookmaker.key,
+            title: bookmaker.title,
+            lastUpdate,
           });
-          gamesUpdated++;
 
-          for (const bookmaker of event.bookmakers || []) {
-            const lastUpdate = bookmaker.last_update ? new Date(bookmaker.last_update) : new Date();
-            if (isNaN(lastUpdate.getTime())) continue;
+          for (const market of bookmaker.markets || []) {
+            for (const outcome of market.outcomes || []) {
+              let outcomeType = "";
 
-            await storage.upsertBookmaker({
-              id: bookmaker.key,
-              title: bookmaker.title,
-              lastUpdate,
-            });
+              if (market.key === "h2h" || market.key === "spreads") {
+                const n = String(outcome.name || "").toLowerCase();
+                const homeTeam = String(event.home_team || "").toLowerCase();
+                const awayTeam = String(event.away_team || "").toLowerCase();
 
-    for (const market of bookmaker.markets || []) {
-    for (const outcome of market.outcomes || []) {
-    let outcomeType = "";
+                const isHome =
+                  n === "home" ||
+                  n.includes("home") ||
+                  n === homeTeam;
 
-    if (market.key === "h2h" || market.key === "spreads") {
-      const n = String(outcome.name || "").toLowerCase();
-      if (n === "home" || outcome.name === event.home_team) outcomeType = "home";
-      else if (n === "away" || outcome.name === event.away_team) outcomeType = "away";
-    } else if (market.key === "totals") {
-      const n = String(outcome.name || "").toLowerCase();
-      outcomeType = n === "over" ? "over" : n === "under" ? "under" : "";
-    }
+                const isAway =
+                  n === "away" ||
+                  n.includes("away") ||
+                  n === awayTeam;
 
-    if (!outcomeType) continue;
+                if (isHome) outcomeType = "home";
+                else if (isAway) outcomeType = "away";
+                else {
+                  // last resort: if name contains team codes/names
+                  if (n && homeTeam && n.includes(homeTeam)) outcomeType = "home";
+                  if (!outcomeType && n && awayTeam && n.includes(awayTeam)) outcomeType = "away";
+                }
+              } else if (market.key === "totals") {
+                const n = String(outcome.name || "").toLowerCase();
+                outcomeType = n === "over" ? "over" : n === "under" ? "under" : "";
+              }
 
-    await storage.upsertOdds({
-      gameId: event.id,
-      bookmakerId: bookmaker.key,
-      market: market.key,
-      outcomeType,
-      price: String(outcome.price),
-      point: outcome.point != null ? String(outcome.point) : null,
-    });
-    oddsUpdated++;
-  }
-}
+              if (!outcomeType) continue;
+
+              await storage.upsertOdds({
+                gameId: event.id,
+                bookmakerId: bookmaker.key,
+                market: market.key,
+                outcomeType,
+                price: String(outcome.price),
+                point: outcome.point != null ? String(outcome.point) : null,
+              });
+              oddsUpdated++;
+            }
           }
         }
-
-        res.json({
-          message: `Synced ${gamesUpdated} games and ${oddsUpdated} odds entries`,
-          sport,
-          limit,
-          gamesUpdated,
-          oddsUpdated,
-          provider: "SportsDataIO"
-        });
-      } catch (error: any) {
-        const status = error?.status ?? error?.response?.status ?? null;
-        const body = error?.body ?? error?.response?.data ?? null;
-        console.error("Error syncing odds:", status, body || error);
-        res.status(500).json({
-          message: "Failed to sync odds",
-          providerStatus: status,
-          provider: "SportsDataIO",
-          providerError:
-            typeof body === "string"
-              ? body.slice(0, 500)
-              : (body?.message ?? String(error?.message || error)).slice(0, 500),
-        });
       }
+
+      res.json({
+        message: `Synced ${gamesUpdated} games and ${oddsUpdated} odds entries`,
+        sport,
+        limit,
+        gamesUpdated,
+        oddsUpdated,
+        provider: "SportsDataIO"
+      });
     } catch (error: any) {
-      console.error("Error in odds sync:", error);
+      console.error("Error syncing odds:", error);
       res.status(500).json({
         message: "Failed to sync odds",
+        providerStatus: error?.status ?? error?.response?.status ?? null,
         provider: "SportsDataIO",
-        error: String(error?.message || error)
+        providerError:
+          typeof error?.body === "string"
+            ? error.body.slice(0, 500)
+            : (error?.body?.message ?? String(error?.message || error)).slice(0, 500),
       });
     }
   });
@@ -266,7 +273,7 @@ export function registerRoutes(app: Express): Express {
     try {
       const { gameId } = req.params as { gameId: string };
       const market = req.query.market as string | undefined;
-    if (!market) return res.status(400).json({ message: "Market parameter is required" });
+      if (!market) return res.status(400).json({ message: "Market parameter is required" });
 
       const bestOdds = await storage.getBestOdds(gameId, market);
       res.json(bestOdds);
