@@ -1,3 +1,4 @@
+// src/services/sportsDataIoApi.ts
 export class SportsDataIoService {
   private apiKey: string;
   private baseUrl = "https://api.sportsdata.io/v3";
@@ -10,7 +11,7 @@ export class SportsDataIoService {
   }
 
   private async fetchWithRetry(url: string, attempt = 1): Promise<any> {
-    // Debug: show URL + status when DEBUG_SYNC=1
+    // Optional debug
     if (process.env.DEBUG_SYNC === "1") {
       const safe = `${url}?key=***`;
       console.log("[fetch] URL:", safe);
@@ -22,11 +23,9 @@ export class SportsDataIoService {
       console.log("[fetch] status:", response.status);
     }
 
-    if (response.status === 429) {
-      if (attempt <= 2) {
-        await new Promise((r) => setTimeout(r, 2000 * attempt));
-        return this.fetchWithRetry(url, attempt + 1);
-      }
+    if (response.status === 429 && attempt <= 2) {
+      await new Promise((r) => setTimeout(r, 2000 * attempt));
+      return this.fetchWithRetry(url, attempt + 1);
     }
 
     if (!response.ok) {
@@ -44,7 +43,8 @@ export class SportsDataIoService {
     return response.json();
   }
 
-  // Get available sports/leagues
+  // ------------ Public API ------------
+
   async getSports(): Promise<any[]> {
     const sports = [
       { key: "NFL", title: "NFL", active: true, endpoint: "nfl" },
@@ -66,7 +66,6 @@ export class SportsDataIoService {
     }));
   }
 
-  // Get games/schedules for a sport
   async getGames(sport: string): Promise<any[]> {
     const sportEndpoint = this.getSportEndpoint(sport);
     if (!sportEndpoint) throw new Error(`Unsupported sport: ${sport}`);
@@ -90,7 +89,6 @@ export class SportsDataIoService {
     }
   }
 
-  // Get odds for games
   async getOdds(sport: string, limit = 25): Promise<any[]> {
     const sportEndpoint = this.getSportEndpoint(sport);
     if (!sportEndpoint) throw new Error(`Unsupported sport: ${sport}`);
@@ -121,20 +119,24 @@ export class SportsDataIoService {
       }
 
       const odds = await this.fetchWithRetry(url);
-      return this.transformOddsData((Array.isArray(odds) ? odds : []).slice(0, limit), sport);
+      // Pass the sport as a fallback so sport_key/title are never null
+      return this.transformOddsData(
+        (Array.isArray(odds) ? odds : []).slice(0, limit),
+        sport
+      );
     } catch (error) {
       console.error(`Error fetching odds for ${sport}:`, error);
+      // Graceful fallback: return skeleton events (no bookmakers)
       const games = await this.getGames(sport);
       return games.slice(0, limit).map((g) => ({ ...g, bookmakers: [] }));
     }
   }
 
-  // Get player stats (simple sample)
   async getPlayerStats(sport: string, season?: string): Promise<any[]> {
     const sportEndpoint = this.getSportEndpoint(sport);
     if (!sportEndpoint) throw new Error(`Unsupported sport: ${sport}`);
 
-    const currentSeason = season || this.getCurrentSeason(sport);
+    // SDIO player endpoint often ignores season param; keep simple
     const url = `${this.baseUrl}/${sportEndpoint}/scores/json/Players`;
 
     try {
@@ -146,7 +148,6 @@ export class SportsDataIoService {
     }
   }
 
-  // Get team standings
   async getStandings(sport: string): Promise<any[]> {
     const sportEndpoint = this.getSportEndpoint(sport);
     if (!sportEndpoint) throw new Error(`Unsupported sport: ${sport}`);
@@ -162,6 +163,8 @@ export class SportsDataIoService {
       return [];
     }
   }
+
+  // ------------ Helpers ------------
 
   private getSportEndpoint(sport: string): string | null {
     const endpoints: Record<string, string> = {
@@ -200,7 +203,6 @@ export class SportsDataIoService {
     try {
       const url = `${this.baseUrl}/${sportEndpoint}/scores/json/CurrentWeek`;
       const week = await this.fetchWithRetry(url);
-      // SportsDataIO often returns a number here
       return typeof week === "number" ? week : (week?.Week ?? 1);
     } catch {
       return 1;
@@ -213,7 +215,7 @@ export class SportsDataIoService {
       id: g.GameID?.toString() || g.GameKey || `${sport}_${Date.now()}_${Math.random()}`,
       sport_key: sport,
       sport_title: sport.toUpperCase(),
-      commence_time: g.DateTime || g.Day,
+      commence_time: g.DateTime || g.Day || null,
       home_team: g.HomeTeam || g.HomeTeamName || "Home Team",
       away_team: g.AwayTeam || g.AwayTeamName || "Away Team",
       completed: g.Status === "Final" || g.IsClosed === true,
@@ -224,38 +226,51 @@ export class SportsDataIoService {
     }));
   }
 
-  private transformOddsData(raw: any[]) {
-  return (raw ?? []).map((event: any) => {
-    const bookmakers = (event.bookmakers ?? []).map((bm: any) => ({
-      key: bm.key ?? bm.Key ?? "unknown",
-      title: bm.title ?? bm.Title ?? bm.key ?? "Unknown",
-      last_update: bm.last_update ?? bm.LastUpdate ?? null,
-      markets: (bm.markets ?? bm.Markets ?? []).map((m: any) => ({
-        key: m.key ?? m.Key ?? "h2h",
-        last_update: m.last_update ?? m.LastUpdate ?? bm.last_update ?? null,
-        outcomes: (m.outcomes ?? m.Outcomes ?? []).map((o: any) => ({
-          name: o.name ?? o.Name ?? null,
-          price: Number(o.price ?? o.Price),
-          point: o.point ?? o.Point ?? null,
-        })),
-      })),
-    }));
+  /**
+   * Normalize odds payloads.
+   * NOTE: This version never references an undefined variable
+   * and safely guards every nested array access.
+   */
+  private transformOddsData(raw: any[], fallbackSportKey?: string) {
+    if (!Array.isArray(raw)) return [];
 
-    return {
-      id: event.id,
-      sport_key: event.sport_key ?? event.sportKey ?? event.sport ?? "NFL",
-      sport_title: event.sport_title ?? event.sportTitle ?? "NFL",
-      commence_time: event.commence_time ?? event.commenceTime ?? null,
-      home_team: event.home_team ?? event.homeTeam ?? null,
-      away_team: event.away_team ?? event.awayTeam ?? null,
-      completed: Boolean(event.completed),
-      home_score: event.home_score ?? null,
-      away_score: event.away_score ?? null,
-      status: event.status ?? "Scheduled",
-      bookmakers,
-    };
-  });
-}
+    return raw.map((event: any) => {
+      const bookmakers = Array.isArray(event.bookmakers)
+        ? event.bookmakers.map((bm: any) => ({
+            key: bm?.key ?? bm?.Key ?? "unknown",
+            title: bm?.title ?? bm?.Title ?? bm?.key ?? "Unknown",
+            last_update: bm?.last_update ?? bm?.LastUpdate ?? null,
+            markets: Array.isArray(bm?.markets ?? bm?.Markets)
+              ? (bm.markets ?? bm.Markets).map((m: any) => ({
+                  key: m?.key ?? m?.Key ?? "h2h",
+                  last_update: m?.last_update ?? m?.LastUpdate ?? bm?.last_update ?? null,
+                  outcomes: Array.isArray(m?.outcomes ?? m?.Outcomes)
+                    ? (m.outcomes ?? m.Outcomes).map((o: any) => ({
+                        name: o?.name ?? o?.Name ?? null, // can be "Home", "Away", "Over", "Under" or team name
+                        price: Number(o?.price ?? o?.Price),
+                        point: o?.point ?? o?.Point ?? null,
+                      }))
+                    : [],
+                }))
+              : [],
+          }))
+        : [];
+
+      return {
+        id: event?.id ?? event?.GameID?.toString?.() ?? `${fallbackSportKey ?? "SPORT"}_${Date.now()}_${Math.random()}`,
+        sport_key: event?.sport_key ?? event?.sportKey ?? event?.sport ?? fallbackSportKey ?? null,
+        sport_title: event?.sport_title ?? event?.sportTitle ?? (fallbackSportKey ?? "") || null,
+        commence_time: event?.commence_time ?? event?.commenceTime ?? event?.DateTime ?? null,
+        home_team: event?.home_team ?? event?.homeTeam ?? event?.HomeTeam ?? null,
+        away_team: event?.away_team ?? event?.awayTeam ?? event?.AwayTeam ?? null,
+        completed: Boolean(event?.completed ?? event?.IsClosed),
+        home_score: event?.home_score ?? event?.HomeScore ?? null,
+        away_score: event?.away_score ?? event?.AwayScore ?? null,
+        status: event?.status ?? event?.Status ?? "Scheduled",
+        bookmakers,
+      };
+    });
+  }
 
   private convertAmericanToDecimal(americanOdds: number): number {
     return americanOdds > 0
@@ -263,7 +278,7 @@ export class SportsDataIoService {
       : 100 / Math.abs(americanOdds) + 1;
   }
 
-  // Mock usage (SportsDataIO doesn’t expose it)
+  // Mock usage (SportsDataIO doesn’t expose usage on all plans)
   async getApiUsage(): Promise<{ requests_used: number; requests_remaining: number }> {
     return { requests_used: 0, requests_remaining: 1000 };
   }
