@@ -338,7 +338,7 @@ private transformOddsData(raw: any[], fallbackSportKey?: string): any[] {
       (b) => Array.isArray(b.markets) && b.markets.length > 0
     );
 
-    return {
+  return {
       id,
       sport_key: sportKey,
       sport_title: sportTitle,
@@ -354,4 +354,6 @@ private transformOddsData(raw: any[], fallbackSportKey?: string): any[] {
       bookmakers,
     };
   });
-}
+} // 👈 closes the SportsDataIoService class
+
+export const sportsDataIoService = new SportsDataIoService();
