@@ -4,7 +4,7 @@ import { sportsDataIoService } from "./services/sportsDataIoApi.js";
 import { db } from "./db.js";
 import { sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { getNflOddsToday } from "./services/espnOdds.js"; // <-- NEW
+import { getNflOddsToday, transformEspnToDbFormat, debugEspnOdds } from "./services/espnOdds.js";
 
 /** Register API routes on the provided Express app. */
 export function registerRoutes(app: Express): Express {
@@ -255,117 +255,698 @@ export function registerRoutes(app: Express): Express {
   // =========================
   app.get("/api/espn/nfl/odds", async (_req, res) => {
     try {
+      console.log('📡 Fetching ESPN NFL odds...');
       const data = await getNflOddsToday();
-      // Shape: { [eventId]: { quotes: OddsQuote[], best: Record<string, OddsQuote|null> } }
-      res.json(data);
-    } catch (e: any) {
-      res.status(500).json({ error: e?.message ?? "Failed to fetch ESPN odds" });
+      
+      // Add summary stats to response
+      const eventCount = Object.keys(data).length;
+      let totalQuotes = 0;
+      const bookmakers = new Set<string>();
+      
+      for (const event of Object.values(data)) {
+        totalQuotes += event.quotes.length;
+        event.quotes.forEach(q => bookmakers.add(q.book));
+      }
+      
+      res.json({
+        success: true,
+        summary: {
+          events: eventCount,
+          totalQuotes,
+          bookmakers: bookmakers.size,
+          books: Array.from(bookmakers),
+        },
+        data
+      });
+    } catch (error: any) {
+      console.error('ESPN odds error:', error);
+      res.status(500).json({ 
+        success: false,
+        error: error?.message || "Failed to fetch ESPN odds",
+        stack: process.env.NODE_ENV === 'development' ? error?.stack : undefined
+      });
     }
   });
 
-  // =========================
-  // Seed functionality for SportsDataIO (also fixed)
-  // =========================
-  app.post("/seed/sportsdata", async (req, res) => {
+  // Get ESPN odds in your DB format
+  app.get("/api/espn/nfl/odds/formatted", async (_req, res) => {
     try {
-      const limit = Math.max(1, parseInt(String(req.query.limit ?? "10"), 10));
-      const sport = (req.query.sport as string) || "NFL";
+      const espnData = await getNflOddsToday();
+      const formatted = transformEspnToDbFormat(espnData, "NFL");
+      
+      res.json({
+        success: true,
+        count: formatted.length,
+        data: formatted
+      });
+    } catch (error: any) {
+      console.error('ESPN formatted odds error:', error);
+      res.status(500).json({ 
+        success: false,
+        error: error?.message || "Failed to format ESPN odds"
+      });
+    }
+  });
 
-      const games = await sportsDataIoService.getGames(sport);
-      const oddsData = await sportsDataIoService.getOdds(sport, limit);
+  // Debug endpoint for ESPN
+  app.get("/api/espn/debug", async (_req, res) => {
+    try {
+      const debugInfo = await debugEspnOdds();
+      res.json({
+        success: true,
+        debug: true,
+        data: debugInfo
+      });
+    } catch (error: any) {
+      console.error('ESPN debug error:', error);
+      res.status(500).json({ 
+        success: false,
+        error: error?.message || "Debug failed"
+      });
+    }
+  });
 
-      let gamesUpserted = 0;
-      let oddsUpserted = 0;
-      let booksUpserted = 0;
-
-      // First sync sports
-      const sports = await sportsDataIoService.getSports();
-      for (const sportData of sports) {
-        await storage.upsertSport({
-          id: sportData.key,
-          title: sportData.title,
-          description: sportData.description,
-          active: sportData.active,
-          hasOutrights: sportData.has_outrights,
-        });
-      }
-
-      // Then sync games and odds
-      for (const event of oddsData.slice(0, limit)) {
-        const commenceTime = event.commence_time ? new Date(event.commence_time) : new Date();
-        if (isNaN(commenceTime.getTime())) continue;
-
+  // Sync ESPN odds to your database
+  app.post("/api/espn/nfl/sync", async (req, res) => {
+    try {
+      const { limit = 10 } = req.body;
+      
+      console.log('🔄 Syncing ESPN NFL odds to database...');
+      
+      // Fetch from ESPN
+      const espnData = await getNflOddsToday();
+      const formatted = transformEspnToDbFormat(espnData, "NFL");
+      
+      let gamesUpdated = 0;
+      let oddsUpdated = 0;
+      let booksUpdated = 0;
+      
+      // Process each event
+      for (const event of formatted.slice(0, limit)) {
+        if (!event.home_team || !event.away_team) continue;
+        
+        // Upsert game
         await storage.upsertGame({
           id: event.id,
-          sportId: event.sport_key,
+          sportId: "NFL",
           homeTeam: event.home_team,
           awayTeam: event.away_team,
-          commenceTime,
-          completed: event.completed || false,
-          homeScore: event.home_score,
-          awayScore: event.away_score,
+          commenceTime: new Date(event.commence_time),
+          completed: false,
         });
-        gamesUpserted++;
-
+        gamesUpdated++;
+        
+        // Process bookmakers
         for (const bookmaker of event.bookmakers || []) {
-          const lastUpdate = bookmaker.last_update ? new Date(bookmaker.last_update) : new Date();
-          if (isNaN(lastUpdate.getTime())) continue;
-
           await storage.upsertBookmaker({
             id: bookmaker.key,
             title: bookmaker.title,
-            lastUpdate,
+            lastUpdate: new Date(bookmaker.last_update),
           });
-          booksUpserted++;
-
+          booksUpdated++;
+          
+          // Process markets
           for (const market of bookmaker.markets || []) {
             for (const outcome of market.outcomes || []) {
               let outcomeType = "";
-
-              if (market.key === "h2h" || market.key === "spreads") {
-                const n = String(outcome.name || "").toLowerCase();
-                const homeTeam = String(event.home_team || "").toLowerCase();
-                const awayTeam = String(event.away_team || "").toLowerCase();
-
-                if (n.includes("home") || n === homeTeam) {
-                  outcomeType = "home";
-                } else if (n.includes("away") || n === awayTeam) {
-                  outcomeType = "away";
-                }
+              
+              if (market.key === "h2h") {
+                outcomeType = outcome.name === event.home_team ? "home" : "away";
+              } else if (market.key === "spreads") {
+                outcomeType = outcome.name === event.home_team ? "home" : "away";
               } else if (market.key === "totals") {
-                const n = String(outcome.name || "").toLowerCase();
-                if (n === "over") outcomeType = "over";
-                if (n === "under") outcomeType = "under";
+                outcomeType = outcome.name === "Over" ? "over" : "under";
               }
-
-              if (!outcomeType) continue;
-
-              await storage.upsertOdds({
-                gameId: event.id,
-                bookmakerId: bookmaker.key,
-                market: market.key,
-                outcomeType,
-                price: String(outcome.price),
-                point: outcome.point != null ? String(outcome.point) : null,
-              });
-              oddsUpserted++;
+              
+              if (outcomeType) {
+                await storage.upsertOdds({
+                  gameId: event.id,
+                  bookmakerId: bookmaker.key,
+                  market: market.key,
+                  outcomeType,
+                  price: String(outcome.price),
+                  point: outcome.point ? String(outcome.point) : null,
+                });
+                oddsUpdated++;
+              }
             }
           }
         }
       }
-
-      return res.json({
-        ok: true,
-        sport,
-        seededFrom: "SportsDataIO",
-        count: limit,
-        gamesUpserted,
-        booksUpserted,
-        oddsUpserted,
+      
+      res.json({
+        success: true,
+        message: `Synced ESPN NFL odds`,
+        stats: {
+          gamesUpdated,
+          booksUpdated,
+          oddsUpdated,
+          source: "ESPN"
+        }
       });
-    } catch (err: any) {
-      console.error("Seed from SportsDataIO failed:", err);
-      return res.status(500).json({ ok: false, message: "Seed from SportsDataIO failed" });
+      
+    } catch (error: any) {
+      console.error('ESPN sync error:', error);
+      res.status(500).json({ 
+        success: false,
+        error: error?.message || "Failed to sync ESPN odds"
+      });
+    }
+  });
+
+  // Compare ESPN vs SportsDataIO odds
+  app.get("/api/odds/compare", async (req, res) => {
+    try {
+      const sport = (req.query.sport as string) || "NFL";
+      
+      console.log('📊 Comparing odds from multiple sources...');
+      
+      // Fetch from both sources
+      const [espnData, sportsDataIoData] = await Promise.allSettled([
+        getNflOddsToday(),
+        sportsDataIoService.getOdds(sport, 25)
+      ]);
+      
+      const comparison: any = {
+        espn: {
+          available: espnData.status === 'fulfilled',
+          events: 0,
+          quotes: 0,
+          bookmakers: new Set<string>(),
+          error: espnData.status === 'rejected' ? espnData.reason?.message : null
+        },
+        sportsDataIo: {
+          available: sportsDataIoData.status === 'fulfilled',
+          events: 0,
+          quotes: 0,
+          bookmakers: new Set<string>(),
+          error: sportsDataIoData.status === 'rejected' ? sportsDataIoData.reason?.message : null
+        }
+      };
+      
+      // Process ESPN data
+      if (espnData.status === 'fulfilled') {
+        const data = espnData.value;
+        comparison.espn.events = Object.keys(data).length;
+        for (const event of Object.values(data)) {
+          comparison.espn.quotes += event.quotes.length;
+          event.quotes.forEach(q => comparison.espn.bookmakers.add(q.book));
+        }
+      }
+      
+      // Process SportsDataIO data
+      if (sportsDataIoData.status === 'fulfilled') {
+        const data = sportsDataIoData.value;
+        comparison.sportsDataIo.events = data.length;
+        for (const event of data) {
+          for (const bookmaker of event.bookmakers || []) {
+            comparison.sportsDataIo.bookmakers.add(bookmaker.title);
+            for (const market of bookmaker.markets || []) {
+              comparison.sportsDataIo.quotes += market.outcomes?.length || 0;
+            }
+          }
+        }
+      }
+      
+      // Convert Sets to arrays for JSON
+      comparison.espn.bookmakers = Array.from(comparison.espn.bookmakers);
+      comparison.sportsDataIo.bookmakers = Array.from(comparison.sportsDataIo.bookmakers);
+      
+      res.json({
+        success: true,
+        comparison,
+        recommendation: comparison.espn.quotes > comparison.sportsDataIo.quotes ? 
+          "ESPN has more odds data available" : 
+          "SportsDataIO has more odds data available"
+      });
+      
+    } catch (error: any) {
+      console.error('Comparison error:', error);
+      res.status(500).json({ 
+        success: false,
+        error: error?.message || "Failed to compare odds sources"
+      });
+    }
+  });
+
+  // Fallback endpoint: Use ESPN if SportsDataIO fails
+  app.get("/api/odds/best", async (req, res) => {
+    try {
+      const sport = (req.query.sport as string) || "NFL";
+      const preferEspn = req.query.prefer === 'espn';
+      
+      let data: any = null;
+      let source = 'none';
+      
+      if (preferEspn) {
+        // Try ESPN first
+        try {
+          const espnData = await getNflOddsToday();
+          if (Object.keys(espnData).length > 0) {
+            data = transformEspnToDbFormat(espnData, sport);
+            source = 'ESPN';
+          }
+        } catch (e) {
+          console.warn('ESPN failed, trying SportsDataIO...', e);
+        }
+        
+        // Fallback to SportsDataIO
+        if (!data) {
+          try {
+            data = await sportsDataIoService.getOdds(sport, 25);
+            source = 'SportsDataIO';
+          } catch (e) {
+            console.warn('SportsDataIO also failed', e);
+          }
+        }
+      } else {
+        // Try SportsDataIO first
+        try {
+          data = await sportsDataIoService.getOdds(sport, 25);
+          source = 'SportsDataIO';
+        } catch (e) {
+          console.warn('SportsDataIO failed, trying ESPN...', e);
+        }
+        
+        // Fallback to ESPN
+        if (!data || data.length === 0) {
+          try {
+            const espnData = await getNflOddsToday();
+            if (Object.keys(espnData).length > 0) {
+              data = transformEspnToDbFormat(espnData, sport);
+              source = 'ESPN';
+            }
+          } catch (e) {
+            console.warn('ESPN also failed', e);
+          }
+        }
+      }
+      
+      if (!data) {
+        return res.status(503).json({
+          success: false,
+          error: "No odds sources available",
+          tried: ['SportsDataIO', 'ESPN']
+        });
+      }
+      
+      res.json({
+        success: true,
+        source,
+        count: Array.isArray(data) ? data.length : Object.keys(data).length,
+        data
+      });
+      
+    } catch (error: any) {
+      console.error('Best odds error:', error);
+      res.status(500).json({ 
+        success: false,
+        error: error?.message || "Failed to fetch odds"
+      });
+    }
+  });
+
+  // Test all odds sources
+  app.get("/api/odds/test-all", async (_req, res) => {
+    try {
+      console.log('🧪 Testing all odds sources...');
+      
+      const results: any = {
+        espn: { working: false, error: null, sampleData: null },
+        sportsDataIo: { working: false, error: null, sampleData: null },
+        arbitrage: { working: false, error: null, sampleData: null }
+      };
+      
+      // Test ESPN
+      try {
+        const espnData = await getNflOddsToday();
+        const eventCount = Object.keys(espnData).length;
+        results.espn.working = eventCount > 0;
+        if (eventCount > 0) {
+          const firstEvent = Object.values(espnData)[0];
+          results.espn.sampleData = {
+            events: eventCount,
+            firstEvent: {
+              teams: `${firstEvent.awayTeam} @ ${firstEvent.homeTeam}`,
+              quotes: firstEvent.quotes.length,
+              bestOdds: firstEvent.best
+            }
+          };
+        }
+      } catch (e: any) {
+        results.espn.error = e.message;
+      }
+      
+      // Test SportsDataIO
+      try {
+        const sdioData = await sportsDataIoService.getOdds("NFL", 1);
+        results.sportsDataIo.working = sdioData.length > 0;
+        if (sdioData.length > 0) {
+          results.sportsDataIo.sampleData = {
+            events: sdioData.length,
+            firstEvent: {
+              teams: `${sdioData[0].away_team} @ ${sdioData[0].home_team}`,
+              bookmakers: sdioData[0].bookmakers?.length || 0
+            }
+          };
+        }
+      } catch (e: any) {
+        results.sportsDataIo.error = e.message;
+      }
+      
+      // Test Arbitrage API (if configured)
+      if (process.env.RAPIDAPI_KEY) {
+        try {
+          const arbData = await arbitrageApiService.getArbitrage();
+          results.arbitrage.working = true;
+          results.arbitrage.sampleData = {
+            type: "ARBITRAGE",
+            hasData: !!arbData
+          };
+        } catch (e: any) {
+          results.arbitrage.error = e.message;
+        }
+      } else {
+        results.arbitrage.error = "RAPIDAPI_KEY not configured";
+      }
+      
+      // Overall status
+      const workingSources = Object.entries(results)
+        .filter(([_, result]) => result.working)
+        .map(([name]) => name);
+      
+      res.json({
+        success: workingSources.length > 0,
+        workingSources,
+        totalSources: Object.keys(results).length,
+        results,
+        recommendation: workingSources.length === 0 ? 
+          "No odds sources are working. Check API keys and network connectivity." :
+          `Use ${workingSources[0]} as primary source`
+      });
+      
+    } catch (error: any) {
+      console.error('Test all error:', error);
+      res.status(500).json({ 
+        success: false,
+        error: error?.message || "Failed to test odds sources"
+      });
+    }
+  });
+
+  // Unified odds endpoint with automatic fallback
+  app.get("/api/odds/unified", async (req, res) => {
+    try {
+      const sport = (req.query.sport as string) || "NFL";
+      const limit = parseInt(req.query.limit as string) || 25;
+      const includeStats = req.query.stats === 'true';
+      
+      console.log(`📊 Fetching unified odds for ${sport}...`);
+      
+      const results = {
+        sport,
+        timestamp: new Date().toISOString(),
+        sources: [] as any[],
+        combined: [] as any[],
+        stats: {
+          totalEvents: 0,
+          totalBookmakers: new Set<string>(),
+          totalQuotes: 0,
+          bySource: {} as Record<string, any>
+        }
+      };
+      
+      // Try all sources in parallel
+      const [espnResult, sdioResult] = await Promise.allSettled([
+        sport === "NFL" ? getNflOddsToday() : Promise.reject(new Error("ESPN only supports NFL")),
+        sportsDataIoService.getOdds(sport, limit)
+      ]);
+      
+      // Process ESPN results
+      if (espnResult.status === 'fulfilled') {
+        const espnData = espnResult.value;
+        const formatted = transformEspnToDbFormat(espnData, sport);
+        
+        let espnQuotes = 0;
+        const espnBooks = new Set<string>();
+        
+        formatted.forEach(event => {
+          event.bookmakers?.forEach(bm => {
+            espnBooks.add(bm.title);
+            bm.markets?.forEach(m => {
+              espnQuotes += m.outcomes?.length || 0;
+            });
+          });
+        });
+        
+        results.sources.push({
+          name: 'ESPN',
+          status: 'success',
+          events: formatted.length,
+          bookmakers: espnBooks.size,
+          quotes: espnQuotes
+        });
+        
+        results.stats.bySource['ESPN'] = {
+          events: formatted.length,
+          bookmakers: Array.from(espnBooks),
+          quotes: espnQuotes
+        };
+        
+        // Add to combined results with source tag
+        formatted.forEach(event => {
+          results.combined.push({
+            ...event,
+            _source: 'ESPN'
+          });
+        });
+      } else {
+        results.sources.push({
+          name: 'ESPN',
+          status: 'failed',
+          error: espnResult.reason?.message || 'Unknown error'
+        });
+      }
+      
+      // Process SportsDataIO results
+      if (sdioResult.status === 'fulfilled') {
+        const sdioData = sdioResult.value;
+        
+        let sdioQuotes = 0;
+        const sdioBooks = new Set<string>();
+        
+        sdioData.forEach(event => {
+          event.bookmakers?.forEach(bm => {
+            sdioBooks.add(bm.title);
+            bm.markets?.forEach(m => {
+              sdioQuotes += m.outcomes?.length || 0;
+            });
+          });
+        });
+        
+        results.sources.push({
+          name: 'SportsDataIO',
+          status: 'success',
+          events: sdioData.length,
+          bookmakers: sdioBooks.size,
+          quotes: sdioQuotes
+        });
+        
+        results.stats.bySource['SportsDataIO'] = {
+          events: sdioData.length,
+          bookmakers: Array.from(sdioBooks),
+          quotes: sdioQuotes
+        };
+        
+        // Add to combined results with source tag
+        sdioData.forEach(event => {
+          // Check if we already have this game from ESPN
+          const existing = results.combined.find(e => 
+            e.home_team === event.home_team && 
+            e.away_team === event.away_team
+          );
+          
+          if (existing && existing.bookmakers.length < (event.bookmakers?.length || 0)) {
+            // Replace with SportsDataIO data if it has more bookmakers
+            const index = results.combined.indexOf(existing);
+            results.combined[index] = {
+              ...event,
+              _source: 'SportsDataIO'
+            };
+          } else if (!existing) {
+            results.combined.push({
+              ...event,
+              _source: 'SportsDataIO'
+            });
+          }
+        });
+      } else {
+        results.sources.push({
+          name: 'SportsDataIO',
+          status: 'failed',
+          error: sdioResult.reason?.message || 'Unknown error'
+        });
+      }
+      
+      // Calculate combined stats
+      results.stats.totalEvents = results.combined.length;
+      results.combined.forEach(event => {
+        event.bookmakers?.forEach(bm => {
+          results.stats.totalBookmakers.add(bm.title);
+          bm.markets?.forEach(m => {
+            results.stats.totalQuotes += m.outcomes?.length || 0;
+          });
+        });
+      });
+      
+      // Sort by commence time
+      results.combined.sort((a, b) => 
+        new Date(a.commence_time).getTime() - new Date(b.commence_time).getTime()
+      );
+      
+      // Apply limit
+      results.combined = results.combined.slice(0, limit);
+      
+      // Convert Set to array for JSON
+      results.stats.totalBookmakers = Array.from(results.stats.totalBookmakers) as any;
+      
+      res.json({
+        success: results.combined.length > 0,
+        ...results,
+        summary: includeStats ? {
+          message: `Found ${results.stats.totalEvents} events from ${results.sources.filter(s => s.status === 'success').length} sources`,
+          bestSource: results.sources.find(s => s.status === 'success')?.name || 'none',
+          coverage: {
+            espn: results.stats.bySource['ESPN']?.events || 0,
+            sportsDataIO: results.stats.bySource['SportsDataIO']?.events || 0
+          }
+        } : undefined
+      });
+      
+    } catch (error: any) {
+      console.error('Unified odds error:', error);
+      res.status(500).json({ 
+        success: false,
+        error: error?.message || "Failed to fetch unified odds"
+      });
+    }
+  });
+
+  // Sync from best available source
+  app.post("/api/odds/sync-best", async (req, res) => {
+    try {
+      const { sport = "NFL", limit = 10 } = req.body;
+      
+      console.log(`🔄 Syncing best available odds for ${sport}...`);
+      
+      let source = 'none';
+      let data: any[] = [];
+      
+      // Try SportsDataIO first (usually more reliable)
+      try {
+        data = await sportsDataIoService.getOdds(sport, limit);
+        source = 'SportsDataIO';
+      } catch (e) {
+        console.warn('SportsDataIO failed:', e);
+      }
+      
+      // Fallback to ESPN if needed and sport is NFL
+      if ((!data || data.length === 0) && sport === "NFL") {
+        try {
+          const espnData = await getNflOddsToday();
+          data = transformEspnToDbFormat(espnData, sport);
+          source = 'ESPN';
+        } catch (e) {
+          console.warn('ESPN also failed:', e);
+        }
+      }
+      
+      if (!data || data.length === 0) {
+        return res.status(503).json({
+          success: false,
+          error: "No odds sources available",
+          attempted: ['SportsDataIO', sport === 'NFL' ? 'ESPN' : null].filter(Boolean)
+        });
+      }
+      
+      // Sync to database
+      let gamesUpdated = 0;
+      let oddsUpdated = 0;
+      let booksUpdated = 0;
+      
+      for (const event of data.slice(0, limit)) {
+        if (!event.home_team || !event.away_team) continue;
+        
+        try {
+          await storage.upsertGame({
+            id: event.id,
+            sportId: sport,
+            homeTeam: event.home_team,
+            awayTeam: event.away_team,
+            commenceTime: new Date(event.commence_time),
+            completed: event.completed || false,
+            homeScore: event.home_score ?? null,
+            awayScore: event.away_score ?? null,
+          });
+          gamesUpdated++;
+          
+          for (const bookmaker of event.bookmakers || []) {
+            await storage.upsertBookmaker({
+              id: bookmaker.key,
+              title: bookmaker.title,
+              lastUpdate: new Date(bookmaker.last_update || Date.now()),
+            });
+            booksUpdated++;
+            
+            for (const market of bookmaker.markets || []) {
+              for (const outcome of market.outcomes || []) {
+                let outcomeType = "";
+                
+                if (market.key === "h2h") {
+                  outcomeType = outcome.name === event.home_team ? "home" : "away";
+                } else if (market.key === "spreads") {
+                  outcomeType = outcome.name === event.home_team ? "home" : "away";
+                } else if (market.key === "totals") {
+                  outcomeType = outcome.name?.toLowerCase() === "over" ? "over" : "under";
+                }
+                
+                if (outcomeType) {
+                  await storage.upsertOdds({
+                    gameId: event.id,
+                    bookmakerId: bookmaker.key,
+                    market: market.key,
+                    outcomeType,
+                    price: String(outcome.price),
+                    point: outcome.point ? String(outcome.point) : null,
+                  });
+                  oddsUpdated++;
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.error(`Error syncing event ${event.id}:`, err);
+        }
+      }
+      
+      res.json({
+        success: true,
+        message: `Synced from ${source}`,
+        source,
+        sport,
+        stats: {
+          gamesUpdated,
+          booksUpdated,
+          oddsUpdated
+        }
+      });
+      
+    } catch (error: any) {
+      console.error('Sync best error:', error);
+      res.status(500).json({ 
+        success: false,
+        error: error?.message || "Failed to sync odds"
+      });
     }
   });
 
